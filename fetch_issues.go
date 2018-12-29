@@ -16,7 +16,7 @@ func StartFetchIssues() error {
 	for _, c := range chs {
 		client := ghClient(c.account.accessToken)
 		for _, q := range c.queries {
-			err := fetchAndSaveIssue(client, c.id, q)
+			err := startFetchIssuesFor(client, c.id, q)
 			if err != nil {
 				return err
 			}
@@ -27,7 +27,20 @@ func StartFetchIssues() error {
 	return nil
 }
 
-func fetchAndSaveIssue(client *github.Client, channelID int, query string) error {
+func startFetchIssuesFor(client *github.Client, channelID int, queryBase string) error {
+	cnt, err := fetchAndSaveIssue(client, channelID, queryBase)
+	if err != nil {
+		return err
+	}
+
+	if cnt != 0 {
+		// go fetchOldIssues(client, )
+	}
+	// go fetchNewIssues()
+	return nil
+}
+
+func fetchAndSaveIssue(client *github.Client, channelID int, query string) (int, error) {
 	ctx := context.Background()
 	opt := &github.SearchOptions{
 		Sort: "updated",
@@ -35,15 +48,15 @@ func fetchAndSaveIssue(client *github.Client, channelID int, query string) error
 	opt.ListOptions.PerPage = 100
 	issues, _, err := client.Search.Issues(ctx, query, nil)
 	if err != nil {
-		return err
+		return -1, err
 	}
 
 	err = ImportIssues(issues.Issues, channelID)
 	if err != nil {
-		return err
+		return -1, err
 	}
 
-	return nil
+	return issues.GetTotal(), nil
 }
 
 // TODO: Support GHE
