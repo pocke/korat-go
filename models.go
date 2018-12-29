@@ -24,7 +24,7 @@ type Channel struct {
 
 func SelectChannels() ([]Channel, error) {
 	res := make([]Channel, 0)
-	accounts := make(map[int]Account)
+	accounts := make(map[int]*Account)
 
 	rows, err := Conn.Query(`
 		select
@@ -53,9 +53,9 @@ func SelectChannels() ([]Channel, error) {
 		}
 
 		if a, ok := accounts[accountID]; ok {
-			ch.account = &a
+			ch.account = a
 		} else {
-			var a Account
+			a := &Account{}
 			err := Conn.QueryRow(`
 				select
 					id, displayName, urlBase, apiUrlBase, accessToken
@@ -67,7 +67,8 @@ func SelectChannels() ([]Channel, error) {
 			if err != nil {
 				return nil, err
 			}
-			ch.account = &a
+			ch.account = a
+			accounts[accountID] = a
 		}
 		res = append(res, ch)
 	}
