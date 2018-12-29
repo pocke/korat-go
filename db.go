@@ -33,10 +33,7 @@ func dbMigrate() error {
 			displayName string not null,
 			urlBase     string not null,
 			apiUrlBase  string not null,
-			accessToken string not null,
-
-			_createdAt   integer not null,
-			_updatedAt   integer not null
+			accessToken string not null
 		);
 
 		create table channels (
@@ -47,19 +44,13 @@ func dbMigrate() error {
 
 			accountID     integer not null,
 
-			_createdAt    integer not null,
-			_updatedAt    integer not null,
-
 			FOREIGN KEY(accountID) REFERENCES accounts(id)
 		);
 
 		create table github_users (
 			id          integer not null primary key,
 			login       string not null,
-			avatarURL   string not null,
-
-			_createdAt   integer not null,
-			_updatedAt   integer not null
+			avatarURL   string not null
 		);
 
 		create table issues (
@@ -79,9 +70,6 @@ func dbMigrate() error {
 			body          string not null,
 			alreadyRead   boolean not null,
 
-			_createdAt   integer not null,
-			_updatedAt   integer not null,
-
 			FOREIGN KEY(userID) REFERENCES github_users(id)
 		);
 
@@ -89,10 +77,7 @@ func dbMigrate() error {
 			id          integer not null primary key,
 			name        string not null,
 			color       string not null,
-			'default'   boolean not null,
-
-			_createdAt   integer not null,
-			_updatedAt   integer not null
+			'default'   boolean not null
 		);
 
 		create table milestones (
@@ -103,19 +88,13 @@ func dbMigrate() error {
 			state         string not null,
 			createdAt     integer not null,
 			updatedAt     integer not null,
-			closedAt      integer,
-
-			_createdAt   integer not null,
-			_updatedAt   integer not null
+			closedAt      integer
 		);
 
 		create table assigned_labels_to_issue (
 			id          integer not null primary key,
 			issueID     integer not null,
 			labelID     integer not null,
-
-			_createdAt   integer not null,
-			_updatedAt   integer not null,
 
 			FOREIGN KEY(issueID) REFERENCES issues(id)
 			FOREIGN KEY(labelID) REFERENCES labels(id)
@@ -126,9 +105,6 @@ func dbMigrate() error {
 			issueID     integer not null,
 			userID      integer not null,
 
-			_createdAt   integer not null,
-			_updatedAt   integer not null,
-
 			FOREIGN KEY(issueID) REFERENCES issues(id)
 			FOREIGN KEY(userID) REFERENCES github_users(id)
 		);
@@ -137,9 +113,6 @@ func dbMigrate() error {
 			id          integer not null primary key,
 			issueID     integer not null,
 			milestoneID integer not null,
-
-			_createdAt   integer not null,
-			_updatedAt   integer not null,
 
 			FOREIGN KEY(issueID) REFERENCES issues(id)
 			FOREIGN KEY(milestoneID) REFERENCES milestones(id)
@@ -155,9 +128,6 @@ func dbMigrate() error {
 			issueID       integer not null,
 			channelID     integer not null,
 
-			_createdAt    integer not null,
-			_updatedAt    integer not null,
-
 			FOREIGN KEY(issueID) REFERENCES issues(id)
 			FOREIGN KEY(channelID) REFERENCES channels(id)
 		)
@@ -171,23 +141,23 @@ func dbMigrate() error {
 
 func doMigration(id int, query string) error {
 	return tx(func(tx *sql.Tx) error {
-		row := tx.QueryRow(`select id from migration_info where id = ?`, id)
-		var blackhole int
-		err := row.Scan(&blackhole)
-
-		if err == sql.ErrNoRows {
-			_, err := tx.Exec(query)
-			if err != nil {
-				return errors.WithStack(err)
-			}
-			_, err = tx.Exec(`insert into migration_info(id) values(?)`, id)
-			if err != nil {
-				return errors.WithStack(err)
-			}
-		} else if err != nil {
-			return errors.WithStack(err)
+		exist, err := rowExist("migration_info", id, tx)
+		if err != nil {
+			return err
 		}
 
+		if exist {
+			return nil
+		}
+
+		_, err = tx.Exec(query)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = tx.Exec(`insert into migration_info(id) values(?)`, id)
+		if err != nil {
+			return errors.WithStack(err)
+		}
 		return nil
 	})
 }
@@ -229,4 +199,21 @@ func init() {
 		fmt.Fprintf(os.Stderr, "%+v\n", err)
 		os.Exit(1)
 	}
+}
+
+type QueryRowable interface {
+	QueryRow(string, ...interface{}) *sql.Row
+}
+
+func rowExist(tbl string, id int, conn QueryRowable) (bool, error) {
+	row := conn.QueryRow(fmt.Sprintf(`select 1 from %s where id = ?`, tbl), id)
+	var blackhole int
+	err := row.Scan(&blackhole)
+
+	if err == sql.ErrNoRows {
+		return false, nil
+	} else if err != nil {
+		return false, errors.WithStack(err)
+	}
+	return true, nil
 }

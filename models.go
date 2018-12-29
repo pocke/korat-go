@@ -3,6 +3,9 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"regexp"
+
+	"github.com/google/go-github/v21/github"
 )
 
 type Account struct {
@@ -74,4 +77,52 @@ func SelectChannels() ([]Channel, error) {
 	}
 
 	return res, nil
+}
+
+var RepoFromIssueUrlRe = regexp.MustCompile(`/([^/]+)/([^/]+)/issues/\d+$`)
+
+func ImportIssues(issues []github.Issue, channelID int) error {
+	return tx(func(tx *sql.Tx) error {
+		for _, i := range issues {
+			url := i.GetURL()
+			m := RepoFromIssueUrlRe.FindStringSubmatch(url)
+			repoOwner := m[1]
+			repoName := m[2]
+
+			user := i.GetUser()
+			userID := user.GetID()
+			_, err := tx.Exec(`
+				replace into github_users
+				(id, login, avatarURL)
+				values (?, ?, ?)
+			`, userID, user.GetLogin(), user.GetAvatarURL())
+
+			id := i.GetID()
+			exist, err := rowExist("issues", (int)(id), tx)
+			if err != nil {
+				return err
+			}
+
+			if exist {
+				_, err = tx.Exec(`
+					update issues
+					set number = ?, title = ?, userID = ?, repoOwner = ?, repoName = ?, state = ?, locked = ?, comments = ?, createdAt = ?, updatedAt = ?, closedAt = ?, isPullRequest = ?, body = ?
+					where id = ?
+				`, i.GetNumber(), i.GetTitle(), userID, repoOwner, repoName, i.GetState(), i.GetLocked(), i.GetComments(), i.GetCreatedAt(), i.GetUpdatedAt(), i.GetClosedAt(), i.IsPullRequest(), i.GetBody(), id)
+				if err != nil {
+					return err
+				}
+			} else {
+				_, err = tx.Exec(`
+					replace into issues
+					(id, number, title, userID, repoOwner, repoName, state, locked, comments, createdAt, updatedAt, closedAt, isPullRequest, body, alreadyRead)
+					VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				`, id, i.GetNumber(), i.GetTitle(), userID, repoOwner, repoName, i.GetState(), i.GetLocked(), i.GetComments(), i.GetCreatedAt(), i.GetUpdatedAt(), i.GetClosedAt(), i.IsPullRequest(), i.GetBody(), false)
+				if err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	})
 }
