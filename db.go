@@ -39,6 +39,20 @@ func dbMigrate() error {
 			_updatedAt   integer not null
 		);
 
+		create table channels (
+			id            integer not null primary key,
+			displayName   string not null,
+			system        string,
+			queries       string not null,
+
+			accountID     integer not null,
+
+			_createdAt    integer not null,
+			_updatedAt    integer not null,
+
+			FOREIGN KEY(accountID) REFERENCES accounts(id)
+		);
+
 		create table github_users (
 			id          integer not null primary key,
 			login       string not null,
