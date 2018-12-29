@@ -149,6 +149,23 @@ func dbMigrate() error {
 		return errors.WithStack(err)
 	}
 
+	err = doMigration(2, `
+		create table channel_issues (
+			id            integer not null primary key,
+			issueID       integer not null,
+			channelID     integer not null,
+
+			_createdAt    integer not null,
+			_updatedAt    integer not null,
+
+			FOREIGN KEY(issueID) REFERENCES issues(id)
+			FOREIGN KEY(channelID) REFERENCES channels(id)
+		)
+	`)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
 	return nil
 }
 
