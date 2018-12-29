@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/go-github/v21/github"
 	"golang.org/x/oauth2"
@@ -46,6 +47,7 @@ func fetchAndSaveIssue(client *github.Client, channelID int, query string) (int,
 		Sort: "updated",
 	}
 	opt.ListOptions.PerPage = 100
+	deqSearchIssueQueue()
 	issues, _, err := client.Search.Issues(ctx, query, nil)
 	if err != nil {
 		return -1, err
@@ -68,4 +70,15 @@ func ghClient(accessToken string) *github.Client {
 	tc := oauth2.NewClient(ctx, ts)
 
 	return github.NewClient(tc)
+}
+
+var searchIssueQueue = make(chan struct{}, 2)
+
+// For rate limit
+func deqSearchIssueQueue() {
+	searchIssueQueue <- struct{}{}
+	go func() {
+		time.Sleep(5 * time.Second)
+		<-searchIssueQueue
+	}()
 }
