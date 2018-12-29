@@ -59,7 +59,8 @@ func SelectChannels() ([]Channel, error) {
 			err := Conn.QueryRow(`
 				select
 					id, displayName, urlBase, apiUrlBase, accessToken
-				from	accounts
+				from
+					accounts
 				where
 					id = ?
 			`, accountID).Scan(&a.id, &a.displayName, &a.urlBase, &a.apiUrlBase, &a.accessToken)
@@ -72,8 +73,4 @@ func SelectChannels() ([]Channel, error) {
 	}
 
 	return res, nil
-}
-
-func strPtr(s string) *string {
-	return &s
 }
