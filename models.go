@@ -252,3 +252,12 @@ func NewestIssueTime(ctx context.Context, channelID int) (time.Time, error) {
 
 	return parseTime(t)
 }
+
+func UpdateIssueAlreadyRead(ctx context.Context, issueID int, alreadyRead bool) error {
+	_, err := Conn.ExecContext(ctx, `
+		update issues
+		set alreadyRead = ?
+		where id = ?
+	`, alreadyRead, issueID)
+	return err
+}

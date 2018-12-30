@@ -15,6 +15,8 @@ func StartHTTPServer(port int) {
 	e.Use(middleware.Logger())
 	e.GET("/accounts", accountsIndex)
 	e.GET("/channels/:channelID/issues", issuesIndex)
+	e.PATCH("/issues/:issueID/markAsRead", issuesMarkAsRead)
+	e.PATCH("/issues/:issueID/markAsUnread", issuesMarkAsUnread)
 	e.Logger.Fatal(e.Start(fmt.Sprintf(":%d", port)))
 }
 
@@ -82,6 +84,33 @@ func issuesIndex(c echo.Context) error {
 	return c.JSON(http.StatusOK, issues)
 
 	return nil
+}
+func issuesMarkAsRead(c echo.Context) error {
+	issueID, err := strconv.Atoi(c.Param("issueID"))
+	if err != nil {
+		return err
+	}
+
+	err = UpdateIssueAlreadyRead(c.Request().Context(), issueID, true)
+	if err != nil {
+		return err
+	}
+
+	return c.NoContent(http.StatusOK)
+}
+
+func issuesMarkAsUnread(c echo.Context) error {
+	issueID, err := strconv.Atoi(c.Param("issueID"))
+	if err != nil {
+		return err
+	}
+
+	err = UpdateIssueAlreadyRead(c.Request().Context(), issueID, false)
+	if err != nil {
+		return err
+	}
+
+	return c.NoContent(http.StatusOK)
 }
 
 func idxIntSlice(arr []int, obj int) int {
