@@ -44,7 +44,12 @@ func startFetchIssuesFor(client *github.Client, channelID int, queryBase string)
 			}
 		}()
 	}
-	// go fetchNewIssues()
+	go func() {
+		err := fetchNewIssues(client, channelID, queryBase)
+		if err != nil {
+			panic(err)
+		}
+	}()
 	return nil
 }
 
@@ -86,6 +91,21 @@ func fetchOldIssues(client *github.Client, channelID int, queryBase string) erro
 	}
 
 	return nil
+}
+
+func fetchNewIssues(client *github.Client, channelID int, queryBase string) error {
+	for {
+		newestUpdatedAt, err := NewestIssueTime(channelID)
+		if err != nil {
+			return err
+		}
+
+		q := queryBase + " updated:>=" + newestUpdatedAt.Format("2006-01-02T15:04:05Z")
+		_, err = fetchAndSaveIssue(client, channelID, q)
+		if err != nil {
+			return err
+		}
+	}
 }
 
 // TODO: Support GHE

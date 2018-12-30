@@ -160,7 +160,7 @@ func OldestIssueTime(channelID int) (time.Time, error) {
 	var t string
 	err := Conn.QueryRow(`
 		select
-			updatedAt
+			i.updatedAt
 		from
 			issues as i,
 			channel_issues as ci
@@ -168,6 +168,28 @@ func OldestIssueTime(channelID int) (time.Time, error) {
 			i.id = ci.issueID AND
 			ci.channelID = ?
 		order by i.updatedAt
+		limit 1
+		;
+`, channelID).Scan(&t)
+	if err != nil {
+		return time.Time{}, err
+	}
+
+	return parseTime(t)
+}
+
+func NewestIssueTime(channelID int) (time.Time, error) {
+	var t string
+	err := Conn.QueryRow(`
+		select
+			i.updatedAt
+		from
+			issues as i,
+			channel_issues as ci
+		where
+			i.id = ci.issueID AND
+			ci.channelID = ?
+		order by i.updatedAt desc
 		limit 1
 		;
 `, channelID).Scan(&t)
