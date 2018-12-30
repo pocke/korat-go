@@ -111,7 +111,7 @@ func SelectIssues(ctx context.Context, channelID, page, perPage int) ([]Issue, e
 			i.id = ci.issueID AND
 			ci.channelID = ?
 		order by
-			i.updatedAt
+			i.updatedAt desc
 		limit
 			?
 		offset
