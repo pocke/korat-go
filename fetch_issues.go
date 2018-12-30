@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/google/go-github/v21/github"
@@ -37,8 +36,13 @@ func startFetchIssuesFor(client *github.Client, channelID int, queryBase string)
 		return err
 	}
 
-	if cnt != 0 {
-		// go fetchOldIssues(client, )
+	if cnt > 1 {
+		go func() {
+			err := fetchOldIssues(client, channelID, queryBase)
+			if err != nil {
+				panic(err)
+			}
+		}()
 	}
 	// go fetchNewIssues()
 	return nil
@@ -57,7 +61,6 @@ func fetchAndSaveIssue(client *github.Client, channelID int, query string) (int,
 	if err != nil {
 		return -1, err
 	}
-	fmt.Println(len(issues.Issues))
 
 	err = ImportIssues(issues.Issues, channelID)
 	if err != nil {
@@ -65,6 +68,24 @@ func fetchAndSaveIssue(client *github.Client, channelID int, query string) (int,
 	}
 
 	return len(issues.Issues), nil
+}
+
+func fetchOldIssues(client *github.Client, channelID int, queryBase string) error {
+	oldestUpdatedAt, err := OldestIssueTime(channelID)
+	if err != nil {
+		return err
+	}
+
+	q := queryBase + " updated:<=" + oldestUpdatedAt.Format("2006-01-02T15:04:05Z")
+	cnt, err := fetchAndSaveIssue(client, channelID, q)
+	if err != nil {
+		return err
+	}
+	if cnt > 1 {
+		return fetchOldIssues(client, channelID, queryBase)
+	}
+
+	return nil
 }
 
 // TODO: Support GHE

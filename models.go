@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"regexp"
+	"time"
 
 	"github.com/google/go-github/v21/github"
 )
@@ -103,12 +104,22 @@ func ImportIssues(issues []github.Issue, channelID int) error {
 				return err
 			}
 
+			createdAt := fmtTime(i.GetCreatedAt())
+			updatedAt := fmtTime(i.GetUpdatedAt())
+			var closedAt sql.NullString
+			if i.ClosedAt == nil {
+				closedAt.Valid = false
+			} else {
+				closedAt.Valid = true
+				closedAt.String = fmtTime(*i.ClosedAt)
+			}
+
 			if exist {
 				_, err = tx.Exec(`
 					update issues
 					set number = ?, title = ?, userID = ?, repoOwner = ?, repoName = ?, state = ?, locked = ?, comments = ?, createdAt = ?, updatedAt = ?, closedAt = ?, isPullRequest = ?, body = ?
 					where id = ?
-				`, i.GetNumber(), i.GetTitle(), userID, repoOwner, repoName, i.GetState(), i.GetLocked(), i.GetComments(), i.GetCreatedAt(), i.GetUpdatedAt(), i.GetClosedAt(), i.IsPullRequest(), i.GetBody(), id)
+				`, i.GetNumber(), i.GetTitle(), userID, repoOwner, repoName, i.GetState(), i.GetLocked(), i.GetComments(), createdAt, updatedAt, closedAt, i.IsPullRequest(), i.GetBody(), id)
 				if err != nil {
 					return err
 				}
@@ -117,7 +128,7 @@ func ImportIssues(issues []github.Issue, channelID int) error {
 					insert into issues
 					(id, number, title, userID, repoOwner, repoName, state, locked, comments, createdAt, updatedAt, closedAt, isPullRequest, body, alreadyRead)
 					VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-				`, id, i.GetNumber(), i.GetTitle(), userID, repoOwner, repoName, i.GetState(), i.GetLocked(), i.GetComments(), i.GetCreatedAt(), i.GetUpdatedAt(), i.GetClosedAt(), i.IsPullRequest(), i.GetBody(), false)
+				`, id, i.GetNumber(), i.GetTitle(), userID, repoOwner, repoName, i.GetState(), i.GetLocked(), i.GetComments(), createdAt, updatedAt, closedAt, i.IsPullRequest(), i.GetBody(), false)
 				if err != nil {
 					return err
 				}
@@ -135,4 +146,34 @@ func ImportIssues(issues []github.Issue, channelID int) error {
 		}
 		return nil
 	})
+}
+
+func fmtTime(t time.Time) string {
+	return t.Format(time.RFC3339)
+}
+
+func parseTime(s string) (time.Time, error) {
+	return time.Parse(time.RFC3339, s)
+}
+
+func OldestIssueTime(channelID int) (time.Time, error) {
+	var t string
+	err := Conn.QueryRow(`
+		select
+			updatedAt
+		from
+			issues as i,
+			channel_issues as ci
+		where
+			i.id = ci.issueID AND
+			ci.channelID = ?
+		order by i.updatedAt
+		limit 1
+		;
+`, channelID).Scan(&t)
+	if err != nil {
+		return time.Time{}, err
+	}
+
+	return parseTime(t)
 }

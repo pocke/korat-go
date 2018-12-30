@@ -63,9 +63,9 @@ func dbMigrate() error {
 			state         string not null,
 			locked        string not null,
 			comments      integer not null,
-			createdAt     integer not null,
-			updatedAt     integer not null,
-			closedAt      integer,
+			createdAt     string not null,
+			updatedAt     string not null,
+			closedAt      string,
 			isPullRequest boolean not null,
 			body          string not null,
 			alreadyRead   boolean not null,
@@ -86,9 +86,9 @@ func dbMigrate() error {
 			title         string not null,
 			description   string not null,
 			state         string not null,
-			createdAt     integer not null,
-			updatedAt     integer not null,
-			closedAt      integer
+			createdAt     string not null,
+			updatedAt     string not null,
+			closedAt      string
 		);
 
 		create table assigned_labels_to_issue (
