@@ -99,6 +99,7 @@ func dbMigrate() error {
 			FOREIGN KEY(issueID) REFERENCES issues(id)
 			FOREIGN KEY(labelID) REFERENCES labels(id)
 		);
+		create unique index uniq_issue_label on assigned_labels_to_issue(issueID, labelID);
 
 		create table assigned_users_to_issue (
 			id          integer not null primary key,
@@ -108,6 +109,7 @@ func dbMigrate() error {
 			FOREIGN KEY(issueID) REFERENCES issues(id)
 			FOREIGN KEY(userID) REFERENCES github_users(id)
 		);
+		create unique index uniq_assigned_user_to_issue on assigned_users_to_issue(issueID, userID);
 
 		create table assigned_milestones_to_issue (
 			id          integer not null primary key,
@@ -117,6 +119,7 @@ func dbMigrate() error {
 			FOREIGN KEY(issueID) REFERENCES issues(id)
 			FOREIGN KEY(milestoneID) REFERENCES milestones(id)
 		);
+		create unique index uniq_milestone_issue on assigned_milestones_to_issue(issueID, milestoneID);
 	`)
 	if err != nil {
 		return errors.WithStack(err)
@@ -130,7 +133,8 @@ func dbMigrate() error {
 
 			FOREIGN KEY(issueID) REFERENCES issues(id)
 			FOREIGN KEY(channelID) REFERENCES channels(id)
-		)
+		);
+		create unique index uniq_channel_issue on channel_issues(issueID, channelID);
 	`)
 	if err != nil {
 		return errors.WithStack(err)

@@ -114,7 +114,7 @@ func ImportIssues(issues []github.Issue, channelID int) error {
 				}
 			} else {
 				_, err = tx.Exec(`
-					replace into issues
+					insert into issues
 					(id, number, title, userID, repoOwner, repoName, state, locked, comments, createdAt, updatedAt, closedAt, isPullRequest, body, alreadyRead)
 					VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 				`, id, i.GetNumber(), i.GetTitle(), userID, repoOwner, repoName, i.GetState(), i.GetLocked(), i.GetComments(), i.GetCreatedAt(), i.GetUpdatedAt(), i.GetClosedAt(), i.IsPullRequest(), i.GetBody(), false)
@@ -122,6 +122,16 @@ func ImportIssues(issues []github.Issue, channelID int) error {
 					return err
 				}
 			}
+
+			_, err = tx.Exec(`
+				replace into channel_issues
+				(issueID, channelID)
+				values (?, ?)
+			`, id, channelID)
+			if err != nil {
+				return err
+			}
+
 		}
 		return nil
 	})

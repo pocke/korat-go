@@ -2,9 +2,12 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/google/go-github/v21/github"
+	_ "github.com/motemen/go-loghttp/global"
+
 	"golang.org/x/oauth2"
 )
 
@@ -45,20 +48,23 @@ func fetchAndSaveIssue(client *github.Client, channelID int, query string) (int,
 	ctx := context.Background()
 	opt := &github.SearchOptions{
 		Sort: "updated",
+		ListOptions: github.ListOptions{
+			PerPage: 100,
+		},
 	}
-	opt.ListOptions.PerPage = 100
 	deqSearchIssueQueue()
-	issues, _, err := client.Search.Issues(ctx, query, nil)
+	issues, _, err := client.Search.Issues(ctx, query, opt)
 	if err != nil {
 		return -1, err
 	}
+	fmt.Println(len(issues.Issues))
 
 	err = ImportIssues(issues.Issues, channelID)
 	if err != nil {
 		return -1, err
 	}
 
-	return issues.GetTotal(), nil
+	return len(issues.Issues), nil
 }
 
 // TODO: Support GHE
