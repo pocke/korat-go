@@ -81,7 +81,7 @@ func fetchOldIssues(client *github.Client, channelID int, queryBase string) erro
 		return err
 	}
 
-	q := queryBase + " updated:<=" + oldestUpdatedAt.Format("2006-01-02T15:04:05Z")
+	q := queryBase + " updated:<=" + fmtTime(oldestUpdatedAt)
 	cnt, err := fetchAndSaveIssue(client, channelID, q)
 	if err != nil {
 		return err
@@ -100,7 +100,7 @@ func fetchNewIssues(client *github.Client, channelID int, queryBase string) erro
 			return err
 		}
 
-		q := queryBase + " updated:>=" + newestUpdatedAt.Format("2006-01-02T15:04:05Z")
+		q := queryBase + " updated:>=" + fmtTime(newestUpdatedAt)
 		_, err = fetchAndSaveIssue(client, channelID, q)
 		if err != nil {
 			return err
