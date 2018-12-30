@@ -1,7 +1,10 @@
 package main
 
+import "context"
+
 func main() {
-	err := StartFetchIssues()
+	ctx := context.Background()
+	err := StartFetchIssues(ctx)
 	if err != nil {
 		panic(err)
 	}

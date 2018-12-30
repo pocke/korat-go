@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"regexp"
@@ -26,11 +27,11 @@ type Channel struct {
 	account *Account
 }
 
-func SelectChannels() ([]Channel, error) {
+func SelectChannels(ctx context.Context) ([]Channel, error) {
 	res := make([]Channel, 0)
 	accounts := make(map[int]*Account)
 
-	rows, err := Conn.Query(`
+	rows, err := Conn.QueryContext(ctx, `
 		select
 			c.id, c.displayName, c.system, c.queries, a.id
 		from
@@ -60,7 +61,7 @@ func SelectChannels() ([]Channel, error) {
 			ch.account = a
 		} else {
 			a := &Account{}
-			err := Conn.QueryRow(`
+			err := Conn.QueryRowContext(ctx, `
 				select
 					id, displayName, urlBase, apiUrlBase, accessToken
 				from
@@ -82,7 +83,7 @@ func SelectChannels() ([]Channel, error) {
 
 var RepoFromIssueUrlRe = regexp.MustCompile(`/([^/]+)/([^/]+)/issues/\d+$`)
 
-func ImportIssues(issues []github.Issue, channelID int) error {
+func ImportIssues(ctx context.Context, issues []github.Issue, channelID int) error {
 	return tx(func(tx *sql.Tx) error {
 		for _, i := range issues {
 			url := i.GetURL()
@@ -92,14 +93,14 @@ func ImportIssues(issues []github.Issue, channelID int) error {
 
 			user := i.GetUser()
 			userID := user.GetID()
-			_, err := tx.Exec(`
+			_, err := tx.ExecContext(ctx, `
 				replace into github_users
 				(id, login, avatarURL)
 				values (?, ?, ?)
 			`, userID, user.GetLogin(), user.GetAvatarURL())
 
 			id := i.GetID()
-			exist, err := rowExist("issues", (int)(id), tx)
+			exist, err := rowExist(ctx, "issues", (int)(id), tx)
 			if err != nil {
 				return err
 			}
@@ -115,7 +116,7 @@ func ImportIssues(issues []github.Issue, channelID int) error {
 			}
 
 			if exist {
-				_, err = tx.Exec(`
+				_, err = tx.ExecContext(ctx, `
 					update issues
 					set number = ?, title = ?, userID = ?, repoOwner = ?, repoName = ?, state = ?, locked = ?, comments = ?, createdAt = ?, updatedAt = ?, closedAt = ?, isPullRequest = ?, body = ?
 					where id = ?
@@ -124,7 +125,7 @@ func ImportIssues(issues []github.Issue, channelID int) error {
 					return err
 				}
 			} else {
-				_, err = tx.Exec(`
+				_, err = tx.ExecContext(ctx, `
 					insert into issues
 					(id, number, title, userID, repoOwner, repoName, state, locked, comments, createdAt, updatedAt, closedAt, isPullRequest, body, alreadyRead)
 					VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -134,7 +135,7 @@ func ImportIssues(issues []github.Issue, channelID int) error {
 				}
 			}
 
-			_, err = tx.Exec(`
+			_, err = tx.ExecContext(ctx, `
 				replace into channel_issues
 				(issueID, channelID)
 				values (?, ?)
@@ -156,9 +157,9 @@ func parseTime(s string) (time.Time, error) {
 	return time.Parse(time.RFC3339, s)
 }
 
-func OldestIssueTime(channelID int) (time.Time, error) {
+func OldestIssueTime(ctx context.Context, channelID int) (time.Time, error) {
 	var t string
-	err := Conn.QueryRow(`
+	err := Conn.QueryRowContext(ctx, `
 		select
 			i.updatedAt
 		from
@@ -178,9 +179,9 @@ func OldestIssueTime(channelID int) (time.Time, error) {
 	return parseTime(t)
 }
 
-func NewestIssueTime(channelID int) (time.Time, error) {
+func NewestIssueTime(ctx context.Context, channelID int) (time.Time, error) {
 	var t string
-	err := Conn.QueryRow(`
+	err := Conn.QueryRowContext(ctx, `
 		select
 			i.updatedAt
 		from

@@ -10,16 +10,16 @@ import (
 	"golang.org/x/oauth2"
 )
 
-func StartFetchIssues() error {
-	chs, err := SelectChannels()
+func StartFetchIssues(ctx context.Context) error {
+	chs, err := SelectChannels(ctx)
 	if err != nil {
 		return err
 	}
 
 	for _, c := range chs {
-		client := ghClient(c.account.accessToken)
+		client := ghClient(ctx, c.account.accessToken)
 		for _, q := range c.queries {
-			err := startFetchIssuesFor(client, c.id, q)
+			err := startFetchIssuesFor(ctx, client, c.id, q)
 			if err != nil {
 				return err
 			}
@@ -30,22 +30,22 @@ func StartFetchIssues() error {
 	return nil
 }
 
-func startFetchIssuesFor(client *github.Client, channelID int, queryBase string) error {
-	cnt, err := fetchAndSaveIssue(client, channelID, queryBase)
+func startFetchIssuesFor(ctx context.Context, client *github.Client, channelID int, queryBase string) error {
+	cnt, err := fetchAndSaveIssue(ctx, client, channelID, queryBase)
 	if err != nil {
 		return err
 	}
 
 	if cnt > 1 {
 		go func() {
-			err := fetchOldIssues(client, channelID, queryBase)
+			err := fetchOldIssues(ctx, client, channelID, queryBase)
 			if err != nil {
 				panic(err)
 			}
 		}()
 	}
 	go func() {
-		err := fetchNewIssues(client, channelID, queryBase)
+		err := fetchNewIssues(ctx, client, channelID, queryBase)
 		if err != nil {
 			panic(err)
 		}
@@ -53,8 +53,7 @@ func startFetchIssuesFor(client *github.Client, channelID int, queryBase string)
 	return nil
 }
 
-func fetchAndSaveIssue(client *github.Client, channelID int, query string) (int, error) {
-	ctx := context.Background()
+func fetchAndSaveIssue(ctx context.Context, client *github.Client, channelID int, query string) (int, error) {
 	opt := &github.SearchOptions{
 		Sort: "updated",
 		ListOptions: github.ListOptions{
@@ -67,7 +66,7 @@ func fetchAndSaveIssue(client *github.Client, channelID int, query string) (int,
 		return -1, err
 	}
 
-	err = ImportIssues(issues.Issues, channelID)
+	err = ImportIssues(ctx, issues.Issues, channelID)
 	if err != nil {
 		return -1, err
 	}
@@ -75,33 +74,33 @@ func fetchAndSaveIssue(client *github.Client, channelID int, query string) (int,
 	return len(issues.Issues), nil
 }
 
-func fetchOldIssues(client *github.Client, channelID int, queryBase string) error {
-	oldestUpdatedAt, err := OldestIssueTime(channelID)
+func fetchOldIssues(ctx context.Context, client *github.Client, channelID int, queryBase string) error {
+	oldestUpdatedAt, err := OldestIssueTime(ctx, channelID)
 	if err != nil {
 		return err
 	}
 
 	q := queryBase + " updated:<=" + fmtTime(oldestUpdatedAt)
-	cnt, err := fetchAndSaveIssue(client, channelID, q)
+	cnt, err := fetchAndSaveIssue(ctx, client, channelID, q)
 	if err != nil {
 		return err
 	}
 	if cnt > 1 {
-		return fetchOldIssues(client, channelID, queryBase)
+		return fetchOldIssues(ctx, client, channelID, queryBase)
 	}
 
 	return nil
 }
 
-func fetchNewIssues(client *github.Client, channelID int, queryBase string) error {
+func fetchNewIssues(ctx context.Context, client *github.Client, channelID int, queryBase string) error {
 	for {
-		newestUpdatedAt, err := NewestIssueTime(channelID)
+		newestUpdatedAt, err := NewestIssueTime(ctx, channelID)
 		if err != nil {
 			return err
 		}
 
 		q := queryBase + " updated:>=" + fmtTime(newestUpdatedAt)
-		_, err = fetchAndSaveIssue(client, channelID, q)
+		_, err = fetchAndSaveIssue(ctx, client, channelID, q)
 		if err != nil {
 			return err
 		}
@@ -109,8 +108,7 @@ func fetchNewIssues(client *github.Client, channelID int, queryBase string) erro
 }
 
 // TODO: Support GHE
-func ghClient(accessToken string) *github.Client {
-	ctx := context.Background()
+func ghClient(ctx context.Context, accessToken string) *github.Client {
 	ts := oauth2.StaticTokenSource(
 		&oauth2.Token{AccessToken: accessToken},
 	)

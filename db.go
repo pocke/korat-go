@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"os"
@@ -144,8 +145,9 @@ func dbMigrate() error {
 }
 
 func doMigration(id int, query string) error {
+	ctx := context.Background()
 	return tx(func(tx *sql.Tx) error {
-		exist, err := rowExist("migration_info", id, tx)
+		exist, err := rowExist(ctx, "migration_info", id, tx)
 		if err != nil {
 			return err
 		}
@@ -207,10 +209,11 @@ func init() {
 
 type QueryRowable interface {
 	QueryRow(string, ...interface{}) *sql.Row
+	QueryRowContext(context.Context, string, ...interface{}) *sql.Row
 }
 
-func rowExist(tbl string, id int, conn QueryRowable) (bool, error) {
-	row := conn.QueryRow(fmt.Sprintf(`select 1 from %s where id = ?`, tbl), id)
+func rowExist(ctx context.Context, tbl string, id int, conn QueryRowable) (bool, error) {
+	row := conn.QueryRowContext(ctx, fmt.Sprintf(`select 1 from %s where id = ?`, tbl), id)
 	var blackhole int
 	err := row.Scan(&blackhole)
 
