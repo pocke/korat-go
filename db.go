@@ -4,9 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log"
 	"os"
 
-	_ "github.com/mattn/go-sqlite3"
+	"github.com/luna-duclos/instrumentedsql"
+	"github.com/mattn/go-sqlite3"
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 )
@@ -62,7 +64,7 @@ func dbMigrate() error {
 			repoOwner     string not null,
 			repoName      string not null,
 			state         string not null,
-			locked        string not null,
+			locked        bool not null,
 			comments      integer not null,
 			createdAt     string not null,
 			updatedAt     string not null,
@@ -184,12 +186,17 @@ func tx(f func(*sql.Tx) error) error {
 }
 
 func init() {
+	logger := instrumentedsql.LoggerFunc(func(ctx context.Context, msg string, keyvals ...interface{}) {
+		log.Printf("%s %v", msg, keyvals)
+	})
+	sql.Register("instrumented-sqlite", instrumentedsql.WrapDriver(&sqlite3.SQLiteDriver{}, instrumentedsql.WithLogger(logger)))
+
 	fname, err := homedir.Expand("~/.cache/korat/development.sqlite3")
 	if err != nil {
 		panic(err)
 	}
 
-	db, err := sql.Open("sqlite3", fname)
+	db, err := sql.Open("instrumented-sqlite", fname)
 	if err != nil {
 		panic(err)
 	}

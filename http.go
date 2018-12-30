@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
@@ -13,6 +14,7 @@ func StartHTTPServer(port int) {
 	e := echo.New()
 	e.Use(middleware.Logger())
 	e.GET("/accounts", accountsIndex)
+	e.GET("/channels/:channelID/issues", issuesIndex)
 	e.Logger.Fatal(e.Start(fmt.Sprintf(":%d", port)))
 }
 
@@ -63,6 +65,23 @@ func accountsIndex(c echo.Context) error {
 		}
 	}
 	return c.JSON(http.StatusOK, res)
+}
+
+func issuesIndex(c echo.Context) error {
+	channelID, err := strconv.Atoi(c.Param("channelID"))
+	if err != nil {
+		return err
+	}
+	// TODO
+	page := 1
+	perPage := 100
+	issues, err := SelectIssues(c.Request().Context(), channelID, page, perPage)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, issues)
+
+	return nil
 }
 
 func idxIntSlice(arr []int, obj int) int {

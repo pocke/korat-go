@@ -81,6 +81,58 @@ func SelectChannels(ctx context.Context) ([]Channel, error) {
 	return res, nil
 }
 
+type Issue struct {
+	ID            int
+	Number        int
+	Title         string
+	UserID        int
+	RepoOwner     string
+	RepoName      string
+	State         string
+	Locked        bool
+	Comments      int
+	CreatedAt     string
+	UpdatedAt     string
+	ClosedAt      sql.NullString
+	IsPullRequest bool
+	Body          string
+	AlreadyRead   bool
+}
+
+func SelectIssues(ctx context.Context, channelID, page, perPage int) ([]Issue, error) {
+	res := make([]Issue, 0)
+	rows, err := Conn.QueryContext(ctx, `
+		select
+			i.id, i.number, i.title, i.userID, i.repoOwner, i.repoName, i.state, i.locked, i.comments, i.createdAt, i.updatedAt, i.closedAt, i.isPullREquest, i.body, i.alreadyRead
+		from
+			issues as i,
+			channel_issues as ci
+		where
+			i.id = ci.issueID AND
+			ci.channelID = ?
+		order by
+			i.updatedAt
+		limit
+			?
+		offset
+			?
+		;
+	`, channelID, perPage, (page-1)*perPage)
+	if err != nil {
+		return nil, err
+	}
+
+	for rows.Next() {
+		i := Issue{}
+		err := rows.Scan(&i.ID, &i.Number, &i.Title, &i.UserID, &i.RepoOwner, &i.RepoName, &i.State, &i.Locked, &i.Comments, &i.CreatedAt, &i.UpdatedAt, &i.ClosedAt, &i.IsPullRequest, &i.Body, &i.AlreadyRead)
+		if err != nil {
+			return nil, err
+		}
+		res = append(res, i)
+	}
+	return res, nil
+}
+
 var RepoFromIssueUrlRe = regexp.MustCompile(`/([^/]+)/([^/]+)/issues/\d+$`)
 
 func ImportIssues(ctx context.Context, issues []github.Issue, channelID int) error {
