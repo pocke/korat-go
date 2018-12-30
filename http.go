@@ -30,7 +30,7 @@ type ResponseAccount struct {
 	DisplayName string
 	UrlBase     string
 	ApiUrlBase  string
-	Channels    []ResponseChannel
+	Channels    []*ResponseChannel
 }
 
 type ResponseChannel struct {
@@ -41,37 +41,11 @@ type ResponseChannel struct {
 }
 
 func accountsIndex(c echo.Context) error {
-	chs, err := SelectChannels(c.Request().Context())
+	accounts, err := SelectAccountForAPI(c.Request().Context())
 	if err != nil {
 		return err
 	}
-
-	addedAccountIDs := []int{}
-	res := make([]*ResponseAccount, 0, 1)
-	for _, ch := range chs {
-		rch := ResponseChannel{
-			ID:          ch.id,
-			DisplayName: ch.displayName,
-			System:      ch.system,
-			Queries:     ch.queries,
-		}
-
-		if idx := idxIntSlice(addedAccountIDs, ch.account.id); idx != -1 {
-			res[idx].Channels = append(res[idx].Channels, rch)
-		} else {
-			a := ch.account
-			ra := &ResponseAccount{
-				ID:          a.id,
-				DisplayName: a.displayName,
-				UrlBase:     a.urlBase,
-				ApiUrlBase:  a.apiUrlBase,
-				Channels:    []ResponseChannel{rch},
-			}
-			addedAccountIDs = append(addedAccountIDs, ch.account.id)
-			res = append(res, ra)
-		}
-	}
-	return c.JSON(http.StatusOK, res)
+	return c.JSON(http.StatusOK, accounts)
 }
 
 func issuesIndex(c echo.Context) error {

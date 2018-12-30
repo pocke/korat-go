@@ -33,12 +33,9 @@ func SelectChannels(ctx context.Context) ([]Channel, error) {
 
 	rows, err := Conn.QueryContext(ctx, `
 		select
-			c.id, c.displayName, c.system, c.queries, a.id
+			c.id, c.displayName, c.system, c.queries, c.accountID
 		from
-			channels as c,
-			accounts as a
-		where
-			c.accountID = a.id;
+			channels as c
 	`)
 	if err != nil {
 		return nil, err
@@ -76,6 +73,62 @@ func SelectChannels(ctx context.Context) ([]Channel, error) {
 			accounts[accountID] = a
 		}
 		res = append(res, ch)
+	}
+
+	return res, nil
+}
+
+func SelectAccountForAPI(ctx context.Context) ([]*ResponseAccount, error) {
+	res := make([]*ResponseAccount, 0)
+	rows, err := Conn.QueryContext(ctx, `
+		select
+			id, displayName, urlBase, apiUrlBase
+		from
+			accounts
+		;
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		a := &ResponseAccount{}
+		err := rows.Scan(&a.ID, &a.DisplayName, &a.UrlBase, &a.ApiUrlBase)
+		if err != nil {
+			return nil, err
+		}
+		channelRows, err := Conn.QueryContext(ctx, `
+			select
+					ID, DisplayName, System, Queries
+			from
+					channels
+			where
+					accountID = ?
+			;
+		`, a.ID)
+		if err != nil {
+			return nil, err
+		}
+		for channelRows.Next() {
+			c := &ResponseChannel{}
+			var queries string
+			err := channelRows.Scan(&c.ID, &c.DisplayName, &c.System, &queries)
+			if err != nil {
+				channelRows.Close()
+				return nil, err
+			}
+			err = json.Unmarshal([]byte(queries), &c.Queries)
+			if err != nil {
+				channelRows.Close()
+				return nil, err
+			}
+
+			a.Channels = append(a.Channels, c)
+		}
+		channelRows.Close()
+
+		res = append(res, a)
 	}
 
 	return res, nil
