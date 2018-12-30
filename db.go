@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
 	"os"
 
 	"github.com/luna-duclos/instrumentedsql"
@@ -187,7 +186,7 @@ func tx(f func(*sql.Tx) error) error {
 
 func init() {
 	logger := instrumentedsql.LoggerFunc(func(ctx context.Context, msg string, keyvals ...interface{}) {
-		log.Printf("%s %v", msg, keyvals)
+		// log.Printf("%s %v", msg, keyvals)
 	})
 	sql.Register("instrumented-sqlite", instrumentedsql.WrapDriver(&sqlite3.SQLiteDriver{}, instrumentedsql.WithLogger(logger)))
 

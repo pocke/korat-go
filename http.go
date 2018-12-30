@@ -13,6 +13,11 @@ import (
 func StartHTTPServer(port int) {
 	e := echo.New()
 	e.Use(middleware.Logger())
+	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
+		AllowOrigins: []string{"file:///", "http://localhost:32034"},
+		AllowHeaders: []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAccept},
+	}))
+
 	e.GET("/accounts", accountsIndex)
 	e.GET("/channels/:channelID/issues", issuesIndex)
 	e.PATCH("/issues/:issueID/markAsRead", issuesMarkAsRead)
