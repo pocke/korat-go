@@ -141,7 +141,6 @@ type Issue struct {
 	ID            int
 	Number        int
 	Title         string
-	UserID        int
 	RepoOwner     string
 	RepoName      string
 	State         string
@@ -154,6 +153,7 @@ type Issue struct {
 	Body          string
 	AlreadyRead   bool
 
+	User      *User
 	Labels    []*Label
 	Assignees []*User
 }
@@ -175,12 +175,15 @@ func SelectIssues(ctx context.Context, channelID, page, perPage int) ([]*Issue, 
 	res := make([]*Issue, 0)
 	rows, err := Conn.QueryContext(ctx, `
 		select
-			i.id, i.number, i.title, i.userID, i.repoOwner, i.repoName, i.state, i.locked, i.comments, i.createdAt, i.updatedAt, i.closedAt, i.isPullREquest, i.body, i.alreadyRead
+			i.id, i.number, i.title, i.repoOwner, i.repoName, i.state, i.locked, i.comments, i.createdAt, i.updatedAt, i.closedAt, i.isPullREquest, i.body, i.alreadyRead,
+			u.id, u.login, u.avatarURL
 		from
 			issues as i,
-			channel_issues as ci
+			channel_issues as ci,
+			github_users as u
 		where
 			i.id = ci.issueID AND
+			u.id = i.userID AND
 			ci.channelID = ?
 		order by
 			i.updatedAt desc
@@ -196,11 +199,14 @@ func SelectIssues(ctx context.Context, channelID, page, perPage int) ([]*Issue, 
 	defer rows.Close()
 
 	for rows.Next() {
+		u := &User{}
 		i := &Issue{
 			Labels:    []*Label{},
 			Assignees: []*User{},
+			User:      u,
 		}
-		err := rows.Scan(&i.ID, &i.Number, &i.Title, &i.UserID, &i.RepoOwner, &i.RepoName, &i.State, &i.Locked, &i.Comments, &i.CreatedAt, &i.UpdatedAt, &i.ClosedAt, &i.IsPullRequest, &i.Body, &i.AlreadyRead)
+		err := rows.Scan(&i.ID, &i.Number, &i.Title, &i.RepoOwner, &i.RepoName, &i.State, &i.Locked, &i.Comments, &i.CreatedAt, &i.UpdatedAt, &i.ClosedAt, &i.IsPullRequest, &i.Body, &i.AlreadyRead,
+			&u.ID, &u.Login, &u.AvatarURL)
 		if err != nil {
 			return nil, err
 		}
