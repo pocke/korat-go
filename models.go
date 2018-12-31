@@ -154,7 +154,8 @@ type Issue struct {
 	Body          string
 	AlreadyRead   bool
 
-	Labels []*Label
+	Labels    []*Label
+	Assignees []*User
 }
 
 type Label struct {
@@ -162,6 +163,12 @@ type Label struct {
 	Name    string
 	Color   string
 	Default bool
+}
+
+type User struct {
+	ID        int
+	Login     string
+	AvatarURL string
 }
 
 func SelectIssues(ctx context.Context, channelID, page, perPage int) ([]*Issue, error) {
@@ -190,7 +197,8 @@ func SelectIssues(ctx context.Context, channelID, page, perPage int) ([]*Issue, 
 
 	for rows.Next() {
 		i := &Issue{
-			Labels: []*Label{},
+			Labels:    []*Label{},
+			Assignees: []*User{},
 		}
 		err := rows.Scan(&i.ID, &i.Number, &i.Title, &i.UserID, &i.RepoOwner, &i.RepoName, &i.State, &i.Locked, &i.Comments, &i.CreatedAt, &i.UpdatedAt, &i.ClosedAt, &i.IsPullRequest, &i.Body, &i.AlreadyRead)
 		if err != nil {
@@ -200,6 +208,9 @@ func SelectIssues(ctx context.Context, channelID, page, perPage int) ([]*Issue, 
 	}
 
 	if err := includeLabelsToIssues(ctx, res); err != nil {
+		return nil, err
+	}
+	if err := includeAssigneesToIssues(ctx, res); err != nil {
 		return nil, err
 	}
 
@@ -238,6 +249,43 @@ func includeLabelsToIssues(ctx context.Context, issues []*Issue) error {
 			return err
 		}
 		issueMap[issueID].Labels = append(issueMap[issueID].Labels, label)
+	}
+
+	return nil
+}
+
+func includeAssigneesToIssues(ctx context.Context, issues []*Issue) error {
+	issueIDs := make([]string, len(issues))
+	issueMap := make(map[int]*Issue, len(issues))
+	for idx, i := range issues {
+		issueIDs[idx] = strconv.Itoa(i.ID)
+		issueMap[i.ID] = i
+	}
+
+	rows, err := Conn.QueryContext(ctx, fmt.Sprintf(`
+		select
+			u.id, u.login, u.avatarURL, ui.issueID
+		from
+			github_users as u,
+			assigned_users_to_issue as ui
+		where
+			u.id = ui.userID AND
+			ui.issueID IN (%s)
+		;
+	`, strings.Join(issueIDs, ", ")))
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		user := &User{}
+		var issueID int
+
+		if err := rows.Scan(&user.ID, &user.Login, &user.AvatarURL, &issueID); err != nil {
+			return err
+		}
+		issueMap[issueID].Assignees = append(issueMap[issueID].Assignees, user)
 	}
 
 	return nil
