@@ -259,6 +259,9 @@ func ImportIssues(ctx context.Context, issues []github.Issue, channelID int) err
 			if err := importLabels(ctx, i, tx); err != nil {
 				return err
 			}
+			if err := importAssignees(ctx, i, tx); err != nil {
+				return err
+			}
 
 			_, err = tx.ExecContext(ctx, `
 				replace into channel_issues
@@ -310,7 +313,6 @@ func importLabels(ctx context.Context, issue github.Issue, tx *sql.Tx) error {
 }
 
 func insertMilestone(ctx context.Context, milestone *github.Milestone, tx *sql.Tx) error {
-
 	mID := milestone.GetID()
 	createdAt := fmtTime(milestone.GetCreatedAt())
 	updatedAt := fmtTime(milestone.GetUpdatedAt())
@@ -329,6 +331,41 @@ func insertMilestone(ctx context.Context, milestone *github.Milestone, tx *sql.T
 		`, mID, milestone.GetNumber(), milestone.GetTitle(), milestone.GetDescription(), milestone.GetState(), createdAt, updatedAt, closedAt)
 	if err != nil {
 		return err
+	}
+
+	return nil
+}
+
+func importAssignees(ctx context.Context, issue github.Issue, tx *sql.Tx) error {
+	issueID := issue.GetID()
+	_, err := tx.ExecContext(ctx, `
+			delete from assigned_users_to_issue
+			where issueID = ?
+		`, issueID)
+	if err != nil {
+		return err
+	}
+
+	for _, user := range issue.Assignees {
+		userID := user.GetID()
+
+		_, err := tx.ExecContext(ctx, `
+				replace into github_users
+				(id, login, avatarURL)
+				VALUES (?, ?, ?)
+			`, userID, user.GetLogin(), user.GetAvatarURL())
+		if err != nil {
+			return err
+		}
+
+		_, err = tx.ExecContext(ctx, `
+				insert into assigned_users_to_issue
+				(issueID, userID)
+				VALUES (?, ?)
+			`, issueID, userID)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
