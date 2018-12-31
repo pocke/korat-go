@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 
 	"github.com/gorilla/websocket"
@@ -96,7 +97,22 @@ func issuesMarkAsUnread(c echo.Context) error {
 	return c.NoContent(http.StatusOK)
 }
 
-var upgrader = websocket.Upgrader{}
+var upgrader = websocket.Upgrader{
+	CheckOrigin: checkOriginWS,
+}
+
+func checkOriginWS(r *http.Request) bool {
+	return true
+	origin := r.Header["Origin"]
+	if len(origin) == 0 {
+		return true
+	}
+	u, err := url.Parse(origin[0])
+	if err != nil {
+		return false
+	}
+	return u.Host == "localhost:32034"
+}
 
 type WsMessage struct {
 	Type    string
@@ -124,11 +140,19 @@ func wsHandler(c echo.Context) error {
 	ch := unreadCountNotifier.Subscribe()
 	defer unreadCountNotifier.Unsubscribe(ch)
 
+	initCnts, err := SelectChannelsUnreadCount(c.Request().Context())
+	if err != nil {
+		return err
+	}
+	for _, initCnt := range initCnts {
+		if err := ws.WriteJSON(WsMessage{Type: WsTypeUnreadCount, Payload: initCnt}); err != nil {
+			return err
+		}
+	}
+
+	// TODO: break this loop when ws conn is closed
 	for count := range ch {
-		err := ws.WriteJSON(WsMessage{
-			Type:    WsTypeUnreadCount,
-			Payload: count,
-		})
+		err := ws.WriteJSON(WsMessage{Type: WsTypeUnreadCount, Payload: count})
 		if err != nil {
 			return err
 		}

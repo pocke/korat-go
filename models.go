@@ -81,6 +81,39 @@ func SelectChannels(ctx context.Context) ([]Channel, error) {
 	return res, nil
 }
 
+func SelectChannelsUnreadCount(ctx context.Context) ([]*UnreadCount, error) {
+	res := make([]*UnreadCount, 0)
+
+	rows, err := Conn.QueryContext(ctx, `
+		select
+			c.id, count(i.id)
+		from
+			channels as c,
+			channel_issues as ci,
+			issues as i
+		where
+			c.id = ci.channelID AND
+			i.id = ci.issueID AND
+			i.alreadyRead = 0
+		group by
+			c.id
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		c := &UnreadCount{}
+		if err := rows.Scan(&c.ChannelID, &c.Count); err != nil {
+			return nil, err
+		}
+		res = append(res, c)
+	}
+
+	return res, nil
+}
+
 func SelectAccountForAPI(ctx context.Context) ([]*ResponseAccount, error) {
 	res := make([]*ResponseAccount, 0)
 	rows, err := Conn.QueryContext(ctx, `
