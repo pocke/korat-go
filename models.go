@@ -4,7 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"regexp"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/go-github/v21/github"
@@ -150,10 +153,19 @@ type Issue struct {
 	IsPullRequest bool
 	Body          string
 	AlreadyRead   bool
+
+	Labels []*Label
 }
 
-func SelectIssues(ctx context.Context, channelID, page, perPage int) ([]Issue, error) {
-	res := make([]Issue, 0)
+type Label struct {
+	ID      int
+	Name    string
+	Color   string
+	Default bool
+}
+
+func SelectIssues(ctx context.Context, channelID, page, perPage int) ([]*Issue, error) {
+	res := make([]*Issue, 0)
 	rows, err := Conn.QueryContext(ctx, `
 		select
 			i.id, i.number, i.title, i.userID, i.repoOwner, i.repoName, i.state, i.locked, i.comments, i.createdAt, i.updatedAt, i.closedAt, i.isPullREquest, i.body, i.alreadyRead
@@ -174,16 +186,61 @@ func SelectIssues(ctx context.Context, channelID, page, perPage int) ([]Issue, e
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 
 	for rows.Next() {
-		i := Issue{}
+		i := &Issue{
+			Labels: []*Label{},
+		}
 		err := rows.Scan(&i.ID, &i.Number, &i.Title, &i.UserID, &i.RepoOwner, &i.RepoName, &i.State, &i.Locked, &i.Comments, &i.CreatedAt, &i.UpdatedAt, &i.ClosedAt, &i.IsPullRequest, &i.Body, &i.AlreadyRead)
 		if err != nil {
 			return nil, err
 		}
 		res = append(res, i)
 	}
+
+	if err := includeLabelsToIssues(ctx, res); err != nil {
+		return nil, err
+	}
+
 	return res, nil
+}
+
+func includeLabelsToIssues(ctx context.Context, issues []*Issue) error {
+	issueIDs := make([]string, len(issues))
+	issueMap := make(map[int]*Issue, len(issues))
+	for idx, i := range issues {
+		issueIDs[idx] = strconv.Itoa(i.ID)
+		issueMap[i.ID] = i
+	}
+
+	rows, err := Conn.QueryContext(ctx, fmt.Sprintf(`
+		select
+			l.id, l.name, l.color, l.'default', li.issueID
+		from
+			labels as l,
+			assigned_labels_to_issue as li
+		where
+			l.id = li.labelID AND
+			li.issueID IN (%s)
+		;
+	`, strings.Join(issueIDs, ", ")))
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		label := &Label{}
+		var issueID int
+
+		if err := rows.Scan(&label.ID, &label.Name, &label.Color, &label.Default, &issueID); err != nil {
+			return err
+		}
+		issueMap[issueID].Labels = append(issueMap[issueID].Labels, label)
+	}
+
+	return nil
 }
 
 var RepoFromIssueUrlRe = regexp.MustCompile(`/([^/]+)/([^/]+)/issues/\d+$`)
