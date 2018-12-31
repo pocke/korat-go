@@ -203,6 +203,9 @@ func ImportIssues(ctx context.Context, issues []github.Issue, channelID int) err
 				(id, login, avatarURL)
 				values (?, ?, ?)
 			`, userID, user.GetLogin(), user.GetAvatarURL())
+			if err != nil {
+				return err
+			}
 
 			id := i.GetID()
 			exist, err := rowExist(ctx, "issues", (int)(id), tx)
@@ -220,24 +223,41 @@ func ImportIssues(ctx context.Context, issues []github.Issue, channelID int) err
 				closedAt.String = fmtTime(*i.ClosedAt)
 			}
 
+			var milestoneID sql.NullInt64
+			var milestone = i.GetMilestone()
+			if milestone == nil {
+				milestoneID.Valid = false
+			} else {
+				milestoneID.Valid = true
+				milestoneID.Int64 = milestone.GetID()
+
+				if err := insertMilestone(ctx, milestone, tx); err != nil {
+					return err
+				}
+			}
+
 			if exist {
 				_, err = tx.ExecContext(ctx, `
 					update issues
-					set number = ?, title = ?, userID = ?, repoOwner = ?, repoName = ?, state = ?, locked = ?, comments = ?, createdAt = ?, updatedAt = ?, closedAt = ?, isPullRequest = ?, body = ?
+					set number = ?, title = ?, userID = ?, repoOwner = ?, repoName = ?, state = ?, locked = ?, comments = ?, createdAt = ?, updatedAt = ?, closedAt = ?, isPullRequest = ?, body = ?, milestoneID = ?
 					where id = ?
-				`, i.GetNumber(), i.GetTitle(), userID, repoOwner, repoName, i.GetState(), i.GetLocked(), i.GetComments(), createdAt, updatedAt, closedAt, i.IsPullRequest(), i.GetBody(), id)
+				`, i.GetNumber(), i.GetTitle(), userID, repoOwner, repoName, i.GetState(), i.GetLocked(), i.GetComments(), createdAt, updatedAt, closedAt, i.IsPullRequest(), i.GetBody(), milestoneID, id)
 				if err != nil {
 					return err
 				}
 			} else {
 				_, err = tx.ExecContext(ctx, `
 					insert into issues
-					(id, number, title, userID, repoOwner, repoName, state, locked, comments, createdAt, updatedAt, closedAt, isPullRequest, body, alreadyRead)
-					VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-				`, id, i.GetNumber(), i.GetTitle(), userID, repoOwner, repoName, i.GetState(), i.GetLocked(), i.GetComments(), createdAt, updatedAt, closedAt, i.IsPullRequest(), i.GetBody(), false)
+					(id, number, title, userID, repoOwner, repoName, state, locked, comments, createdAt, updatedAt, closedAt, isPullRequest, body, alreadyRead, milestoneID)
+					VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				`, id, i.GetNumber(), i.GetTitle(), userID, repoOwner, repoName, i.GetState(), i.GetLocked(), i.GetComments(), createdAt, updatedAt, closedAt, i.IsPullRequest(), i.GetBody(), false, milestoneID)
 				if err != nil {
 					return err
 				}
+			}
+
+			if err := importLabels(ctx, i, tx); err != nil {
+				return err
 			}
 
 			_, err = tx.ExecContext(ctx, `
@@ -252,6 +272,66 @@ func ImportIssues(ctx context.Context, issues []github.Issue, channelID int) err
 		}
 		return nil
 	})
+}
+
+func importLabels(ctx context.Context, issue github.Issue, tx *sql.Tx) error {
+	issueID := issue.GetID()
+	_, err := tx.ExecContext(ctx, `
+			delete from assigned_labels_to_issue
+			where issueID = ?
+		`, issueID)
+	if err != nil {
+		return err
+	}
+
+	for _, label := range issue.Labels {
+		labelID := label.GetID()
+
+		_, err := tx.ExecContext(ctx, `
+				replace into labels
+				(id, name, color, 'default')
+				VALUES (?, ?, ?, ?)
+			`, labelID, label.GetName(), label.GetColor(), label.GetDefault())
+		if err != nil {
+			return err
+		}
+
+		_, err = tx.ExecContext(ctx, `
+				insert into assigned_labels_to_issue
+				(issueID, labelID)
+				VALUES (?, ?)
+			`, issueID, labelID)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func insertMilestone(ctx context.Context, milestone *github.Milestone, tx *sql.Tx) error {
+
+	mID := milestone.GetID()
+	createdAt := fmtTime(milestone.GetCreatedAt())
+	updatedAt := fmtTime(milestone.GetUpdatedAt())
+	var closedAt sql.NullString
+	if milestone.ClosedAt == nil {
+		closedAt.Valid = false
+	} else {
+		closedAt.Valid = true
+		closedAt.String = fmtTime(*milestone.ClosedAt)
+	}
+
+	_, err := tx.ExecContext(ctx, `
+			replace into milestones
+			(id, number, title, description, state, createdAt, updatedAt, closedAt)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		`, mID, milestone.GetNumber(), milestone.GetTitle(), milestone.GetDescription(), milestone.GetState(), createdAt, updatedAt, closedAt)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func fmtTime(t time.Time) string {

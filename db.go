@@ -71,8 +71,10 @@ func dbMigrate() error {
 			isPullRequest boolean not null,
 			body          string not null,
 			alreadyRead   boolean not null,
+			milestoneID   integer,
 
 			FOREIGN KEY(userID) REFERENCES github_users(id)
+			FOREIGN KEY(milestoneID) REFERENCES milestones(id)
 		);
 
 		create table labels (
@@ -112,16 +114,6 @@ func dbMigrate() error {
 			FOREIGN KEY(userID) REFERENCES github_users(id)
 		);
 		create unique index uniq_assigned_user_to_issue on assigned_users_to_issue(issueID, userID);
-
-		create table assigned_milestones_to_issue (
-			id          integer not null primary key,
-			issueID     integer not null,
-			milestoneID integer not null,
-
-			FOREIGN KEY(issueID) REFERENCES issues(id)
-			FOREIGN KEY(milestoneID) REFERENCES milestones(id)
-		);
-		create unique index uniq_milestone_issue on assigned_milestones_to_issue(issueID, milestoneID);
 	`)
 	if err != nil {
 		return errors.WithStack(err)
