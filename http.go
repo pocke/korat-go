@@ -127,11 +127,13 @@ func wsHandler(c echo.Context) error {
 		return err
 	}
 	defer ws.Close()
+	closeCh := make(chan struct{})
 
 	go func() {
 		for {
 			if _, _, err := ws.NextReader(); err != nil {
 				ws.Close()
+				close(closeCh)
 				break
 			}
 		}
@@ -150,11 +152,15 @@ func wsHandler(c echo.Context) error {
 		}
 	}
 
-	// TODO: break this loop when ws conn is closed
-	for count := range ch {
-		err := ws.WriteJSON(WsMessage{Type: WsTypeUnreadCount, Payload: count})
-		if err != nil {
-			return err
+	for {
+		select {
+		case count := <-ch:
+			err := ws.WriteJSON(WsMessage{Type: WsTypeUnreadCount, Payload: count})
+			if err != nil {
+				return err
+			}
+		case <-closeCh:
+			return nil
 		}
 	}
 
