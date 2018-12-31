@@ -98,6 +98,13 @@ func issuesMarkAsUnread(c echo.Context) error {
 
 var upgrader = websocket.Upgrader{}
 
+type WsMessage struct {
+	Type    string
+	Payload interface{}
+}
+
+const WsTypeUnreadCount = "UnreadCount"
+
 func wsHandler(c echo.Context) error {
 	ws, err := upgrader.Upgrade(c.Response(), c.Request(), nil)
 	if err != nil {
@@ -114,8 +121,17 @@ func wsHandler(c echo.Context) error {
 		}
 	}()
 
-	for {
-		// TODO: write
+	ch := unreadCountNotifier.Subscribe()
+	defer unreadCountNotifier.Unsubscribe(ch)
+
+	for count := range ch {
+		err := ws.WriteJSON(WsMessage{
+			Type:    WsTypeUnreadCount,
+			Payload: count,
+		})
+		if err != nil {
+			return err
+		}
 	}
 
 	return errors.New("Unreachable")
