@@ -6,8 +6,10 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/gorilla/websocket"
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
+	"github.com/pkg/errors"
 )
 
 func StartHTTPServer(port int) {
@@ -22,6 +24,8 @@ func StartHTTPServer(port int) {
 	e.GET("/channels/:channelID/issues", issuesIndex)
 	e.PATCH("/issues/:issueID/markAsRead", issuesMarkAsRead)
 	e.PATCH("/issues/:issueID/markAsUnread", issuesMarkAsUnread)
+
+	e.GET("/ws", wsHandler)
 	e.Logger.Fatal(e.Start(fmt.Sprintf(":%d", port)))
 }
 
@@ -90,6 +94,31 @@ func issuesMarkAsUnread(c echo.Context) error {
 	}
 
 	return c.NoContent(http.StatusOK)
+}
+
+var upgrader = websocket.Upgrader{}
+
+func wsHandler(c echo.Context) error {
+	ws, err := upgrader.Upgrade(c.Response(), c.Request(), nil)
+	if err != nil {
+		return err
+	}
+	defer ws.Close()
+
+	go func() {
+		for {
+			if _, _, err := ws.NextReader(); err != nil {
+				ws.Close()
+				break
+			}
+		}
+	}()
+
+	for {
+		// TODO: write
+	}
+
+	return errors.New("Unreachable")
 }
 
 func idxIntSlice(arr []int, obj int) int {
