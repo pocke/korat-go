@@ -170,6 +170,67 @@ func SelectAccountForAPI(ctx context.Context) ([]*ResponseAccount, error) {
 	return res, nil
 }
 
+func UnreadCountForIssue(ctx context.Context, issueID int) ([]*UnreadCount, error) {
+	rows, err := Conn.QueryContext(ctx, `
+		select
+			channelID
+		from
+			channel_issues
+		where
+			issueID = ?
+	`, issueID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	channelIDs := make([]string, 0)
+	res := make([]*UnreadCount, 0)
+	channelMap := make(map[int]*UnreadCount, 0)
+
+	for i := 0; rows.Next(); i++ {
+		c := &UnreadCount{Count: 0}
+		err := rows.Scan(&c.ChannelID)
+		if err != nil {
+			return nil, err
+		}
+		res = append(res, c)
+		channelIDs = append(channelIDs, strconv.Itoa(c.ChannelID))
+		channelMap[c.ChannelID] = c
+	}
+
+	rows, err = Conn.QueryContext(ctx, fmt.Sprintf(`
+		select
+			ci.channelID, count(i.id)
+		from
+			channel_issues as ci,
+			issues as i
+		where
+			ci.issueID = i.ID AND
+			ci.channelID IN (%s) AND
+			i.alreadyRead = 0
+		group by
+			ci.channelID
+	`, strings.Join(channelIDs, ",")))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var channelID int
+		var cnt int
+		err := rows.Scan(&channelID, &cnt)
+		if err != nil {
+			return nil, err
+		}
+
+		channelMap[channelID].Count = cnt
+	}
+
+	return res, nil
+}
+
 type Issue struct {
 	ID            int
 	Number        int

@@ -80,6 +80,14 @@ func issuesMarkAsRead(c echo.Context) error {
 		return err
 	}
 
+	cnts, err := UnreadCountForIssue(c.Request().Context(), issueID)
+	if err != nil {
+		return err
+	}
+	for _, cnt := range cnts {
+		unreadCountNotifier.Notify(cnt)
+	}
+
 	return c.NoContent(http.StatusOK)
 }
 
@@ -92,6 +100,14 @@ func issuesMarkAsUnread(c echo.Context) error {
 	err = UpdateIssueAlreadyRead(c.Request().Context(), issueID, false)
 	if err != nil {
 		return err
+	}
+
+	cnts, err := UnreadCountForIssue(c.Request().Context(), issueID)
+	if err != nil {
+		return err
+	}
+	for _, cnt := range cnts {
+		unreadCountNotifier.Notify(cnt)
 	}
 
 	return c.NoContent(http.StatusOK)
