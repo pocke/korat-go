@@ -170,15 +170,20 @@ func SelectAccountForAPI(ctx context.Context) ([]*ResponseAccount, error) {
 	return res, nil
 }
 
-func UnreadCountForIssue(ctx context.Context, issueID int) ([]*UnreadCount, error) {
-	rows, err := Conn.QueryContext(ctx, `
+func UnreadCountForIssue(ctx context.Context, issueIDs []int) ([]*UnreadCount, error) {
+	issueIDsStr := make([]string, len(issueIDs))
+	for idx, issueID := range issueIDs {
+		issueIDsStr[idx] = strconv.Itoa(issueID)
+	}
+
+	rows, err := Conn.QueryContext(ctx, fmt.Sprintf(`
 		select
 			channelID
 		from
 			channel_issues
 		where
-			issueID = ?
-	`, issueID)
+			issueID IN (%s)
+	`, strings.Join(issueIDsStr, ",")))
 	if err != nil {
 		return nil, err
 	}

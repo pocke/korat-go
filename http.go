@@ -88,7 +88,7 @@ func handleAlreadyRead(c echo.Context, read bool) error {
 		return err
 	}
 
-	cnts, err := UnreadCountForIssue(c.Request().Context(), issueID)
+	cnts, err := UnreadCountForIssue(c.Request().Context(), []int{issueID})
 	if err != nil {
 		return err
 	}
