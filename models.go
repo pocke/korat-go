@@ -81,6 +81,39 @@ func SelectChannels(ctx context.Context) ([]Channel, error) {
 	return res, nil
 }
 
+func SelectChannelsUnreadCount(ctx context.Context) ([]*UnreadCount, error) {
+	res := make([]*UnreadCount, 0)
+
+	rows, err := Conn.QueryContext(ctx, `
+		select
+			c.id, count(i.id)
+		from
+			channels as c,
+			channel_issues as ci,
+			issues as i
+		where
+			c.id = ci.channelID AND
+			i.id = ci.issueID AND
+			i.alreadyRead = 0
+		group by
+			c.id
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		c := &UnreadCount{}
+		if err := rows.Scan(&c.ChannelID, &c.Count); err != nil {
+			return nil, err
+		}
+		res = append(res, c)
+	}
+
+	return res, nil
+}
+
 func SelectAccountForAPI(ctx context.Context) ([]*ResponseAccount, error) {
 	res := make([]*ResponseAccount, 0)
 	rows, err := Conn.QueryContext(ctx, `
@@ -132,6 +165,72 @@ func SelectAccountForAPI(ctx context.Context) ([]*ResponseAccount, error) {
 		channelRows.Close()
 
 		res = append(res, a)
+	}
+
+	return res, nil
+}
+
+func UnreadCountForIssue(ctx context.Context, issueIDs []int) ([]*UnreadCount, error) {
+	issueIDsStr := make([]string, len(issueIDs))
+	for idx, issueID := range issueIDs {
+		issueIDsStr[idx] = strconv.Itoa(issueID)
+	}
+
+	rows, err := Conn.QueryContext(ctx, fmt.Sprintf(`
+		select
+			channelID
+		from
+			channel_issues
+		where
+			issueID IN (%s)
+	`, strings.Join(issueIDsStr, ",")))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	channelIDs := make([]string, 0)
+	res := make([]*UnreadCount, 0)
+	channelMap := make(map[int]*UnreadCount, 0)
+
+	for i := 0; rows.Next(); i++ {
+		c := &UnreadCount{Count: 0}
+		err := rows.Scan(&c.ChannelID)
+		if err != nil {
+			return nil, err
+		}
+		res = append(res, c)
+		channelIDs = append(channelIDs, strconv.Itoa(c.ChannelID))
+		channelMap[c.ChannelID] = c
+	}
+
+	rows, err = Conn.QueryContext(ctx, fmt.Sprintf(`
+		select
+			ci.channelID, count(i.id)
+		from
+			channel_issues as ci,
+			issues as i
+		where
+			ci.issueID = i.ID AND
+			ci.channelID IN (%s) AND
+			i.alreadyRead = 0
+		group by
+			ci.channelID
+	`, strings.Join(channelIDs, ",")))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var channelID int
+		var cnt int
+		err := rows.Scan(&channelID, &cnt)
+		if err != nil {
+			return nil, err
+		}
+
+		channelMap[channelID].Count = cnt
 	}
 
 	return res, nil

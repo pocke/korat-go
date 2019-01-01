@@ -71,6 +71,10 @@ func fetchAndSaveIssue(ctx context.Context, client *github.Client, channelID int
 		return -1, err
 	}
 
+	if err := notifyUnreadCount(ctx, issues.Issues); err != nil {
+		return 0, err
+	}
+
 	return len(issues.Issues), nil
 }
 
@@ -107,7 +111,23 @@ func fetchNewIssues(ctx context.Context, client *github.Client, channelID int, q
 	}
 }
 
-// TODO: Support GHE
+func notifyUnreadCount(ctx context.Context, issues []github.Issue) error {
+	ids := make([]int, len(issues))
+	for idx, i := range issues {
+		ids[idx] = (int)(i.GetID())
+	}
+
+	cnts, err := UnreadCountForIssue(ctx, ids)
+	if err != nil {
+		return err
+	}
+
+	for _, cnt := range cnts {
+		unreadCountNotifier.Notify(cnt)
+	}
+	return nil
+}
+
 func ghClient(ctx context.Context, accessToken string) *github.Client {
 	ts := oauth2.StaticTokenSource(
 		&oauth2.Token{AccessToken: accessToken},
