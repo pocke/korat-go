@@ -70,34 +70,20 @@ func issuesIndex(c echo.Context) error {
 	return nil
 }
 func issuesMarkAsRead(c echo.Context) error {
-	issueID, err := strconv.Atoi(c.Param("issueID"))
-	if err != nil {
-		return err
-	}
-
-	err = UpdateIssueAlreadyRead(c.Request().Context(), issueID, true)
-	if err != nil {
-		return err
-	}
-
-	cnts, err := UnreadCountForIssue(c.Request().Context(), issueID)
-	if err != nil {
-		return err
-	}
-	for _, cnt := range cnts {
-		unreadCountNotifier.Notify(cnt)
-	}
-
-	return c.NoContent(http.StatusOK)
+	return handleAlreadyRead(c, true)
 }
 
 func issuesMarkAsUnread(c echo.Context) error {
+	return handleAlreadyRead(c, false)
+}
+
+func handleAlreadyRead(c echo.Context, read bool) error {
 	issueID, err := strconv.Atoi(c.Param("issueID"))
 	if err != nil {
 		return err
 	}
 
-	err = UpdateIssueAlreadyRead(c.Request().Context(), issueID, false)
+	err = UpdateIssueAlreadyRead(c.Request().Context(), issueID, read)
 	if err != nil {
 		return err
 	}
