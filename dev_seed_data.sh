@@ -42,4 +42,32 @@ sqlite3 ~/.cache/korat/development.sqlite3 << END
     1,
     'watching'
   );
+
+  replace into channels (id, displayName, queries, accountID) VALUES (
+    5,
+    '/pulls (open)',
+    '["is:pr author:pocke is:open"]',
+    1
+  );
+
+  replace into channels (id, displayName, queries, accountID) VALUES (
+    6,
+    '/pulls (closed)',
+    '["is:pr author:pocke is:closed"]',
+    1
+  );
+
+  replace into channels (id, displayName, queries, accountID) VALUES (
+    7,
+    '/issues (open)',
+    '["is:issue author:pocke is:open"]',
+    1
+  );
+
+  replace into channels (id, displayName, queries, accountID) VALUES (
+    8,
+    '/issues (closed)',
+    '["is:issue author:pocke is:closed"]',
+    1
+  );
 END
