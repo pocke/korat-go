@@ -14,6 +14,12 @@ import (
 	"golang.org/x/oauth2"
 )
 
+// GitHub does not accept too large URI,
+// so korat should separate requests if query is too long.
+// The limit is actually about 6800. This limit is investigated with binary searching with GitHub API.
+// This constant has leeway.
+const GitHubURIlimit = 5000
+
 func StartFetchIssues(ctx context.Context) error {
 	chs, err := SelectChannels(ctx)
 	if err != nil {
@@ -221,9 +227,33 @@ func buildSystemQueries(ctx context.Context, kind string, client *github.Client)
 		}
 
 		return []string{strings.Join(q, " ")}, nil
-	case "watched":
-		// TODO
-		return nil, nil
+	case "watching":
+		var allRepos []*github.Repository
+		opt := &github.ListOptions{PerPage: 100}
+		for {
+			repos, resp, err := client.Activity.ListWatched(ctx, "", opt)
+			if err != nil {
+				return nil, err
+			}
+			allRepos = append(allRepos, repos...)
+			if resp.NextPage == 0 {
+				break
+			}
+			opt.Page = resp.NextPage
+		}
+		res := []string{""}
+		for _, r := range allRepos {
+			q := fmt.Sprintf("repo:%s", r.GetFullName())
+			lastIdx := len(res) - 1
+			last := res[lastIdx]
+			newQuery := last + " " + q
+			if len(newQuery) < GitHubURIlimit {
+				res[lastIdx] = newQuery
+			} else {
+				res = append(res, q)
+			}
+		}
+		return res, nil
 	default:
 		return nil, errors.Errorf("%s is not a valid system type.", kind)
 	}

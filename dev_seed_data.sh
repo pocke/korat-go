@@ -34,4 +34,12 @@ sqlite3 ~/.cache/korat/development.sqlite3 << END
     1,
     'teams'
   );
+
+  replace into channels (id, displayName, queries, accountID, system) VALUES (
+    4,
+    'Watching',
+    '[]',
+    1,
+    'watching'
+  );
 END
