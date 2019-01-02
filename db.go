@@ -133,8 +133,18 @@ func dbMigrate() error {
 
 			FOREIGN KEY(issueID) REFERENCES issues(id)
 			FOREIGN KEY(channelID) REFERENCES channels(id)
+			FOREIGN KEY(queryID) REFERENCES queries(id)
 		);
 		create unique index uniq_channel_issue on channel_issues(issueID, channelID, queryID);
+	`)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	err = doMigration(3, `
+		create index fk_channel_account_id on channels(accountID);
+		create index fk_issue_user_id on issues(userID);
+		create index fk_issue_milestone_id on issues(milestoneID);
 	`)
 	if err != nil {
 		return errors.WithStack(err)
