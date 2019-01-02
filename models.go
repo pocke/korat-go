@@ -273,7 +273,7 @@ type User struct {
 func SelectIssues(ctx context.Context, channelID, page, perPage int) ([]*Issue, error) {
 	res := make([]*Issue, 0)
 	rows, err := Conn.QueryContext(ctx, `
-		select
+		select distinct
 			i.id, i.number, i.title, i.repoOwner, i.repoName, i.state, i.locked, i.comments, i.createdAt, i.updatedAt, i.closedAt, i.isPullREquest, i.body, i.alreadyRead,
 			u.id, u.login, u.avatarURL
 		from
