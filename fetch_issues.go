@@ -3,10 +3,13 @@ package main
 import (
 	"context"
 	"database/sql"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/go-github/v21/github"
 	_ "github.com/motemen/go-loghttp/global"
+	"github.com/pkg/errors"
 
 	"golang.org/x/oauth2"
 )
@@ -19,7 +22,18 @@ func StartFetchIssues(ctx context.Context) error {
 
 	for _, c := range chs {
 		client := ghClient(ctx, c.account.accessToken)
-		for _, q := range c.queries {
+		var qs []string
+		if c.system.Valid == true {
+			var err error
+			qs, err = buildSystemQueries(ctx, c.system.String, client)
+			if err != nil {
+				return err
+			}
+		} else {
+			qs = c.queries
+		}
+
+		for _, q := range qs {
 			err := startFetchIssuesFor(ctx, client, c.id, q)
 			if err != nil {
 				return err
@@ -182,4 +196,31 @@ func deqSearchIssueQueue() {
 		time.Sleep(5 * time.Second)
 		<-searchIssueQueue
 	}()
+}
+
+func buildSystemQueries(ctx context.Context, kind string, client *github.Client) ([]string, error) {
+	switch kind {
+	case "teams":
+		var allTeams []*github.Team
+		opt := &github.ListOptions{PerPage: 100}
+		for {
+			teams, resp, err := client.Teams.ListUserTeams(ctx, opt)
+			if err != nil {
+				return nil, err
+			}
+			allTeams = append(allTeams, teams...)
+			if resp.NextPage == 0 {
+				break
+			}
+			opt.Page = resp.NextPage
+		}
+		var q []string
+		for _, t := range allTeams {
+			q = append(q, fmt.Sprintf("team:%s/%s", t.Organization.GetLogin(), t.GetSlug()))
+		}
+
+		return []string{strings.Join(q, " ")}, nil
+	default:
+		return nil, errors.Errorf("%s is not a valid system type.", kind)
+	}
 }

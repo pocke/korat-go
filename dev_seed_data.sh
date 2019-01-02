@@ -26,4 +26,12 @@ sqlite3 ~/.cache/korat/development.sqlite3 << END
     '["user:rubocop-hq"]',
     1
   );
+
+  replace into channels (id, displayName, queries, accountID, system) VALUES (
+    3,
+    'Teams',
+    '[]',
+    1,
+    'teams'
+  );
 END
