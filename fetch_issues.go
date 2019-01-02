@@ -3,7 +3,12 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"log"
+	"net/http"
+	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -28,23 +33,15 @@ func StartFetchIssues(ctx context.Context) error {
 
 	for _, c := range chs {
 		go func(c Channel) {
-			client := ghClient(ctx, c.account.accessToken)
-			var qs []string
-			if c.system.Valid == true {
-				var err error
-				qs, err = buildSystemQueries(ctx, c.system.String, client)
+			for {
+				childCtx, cancel := context.WithCancel(ctx)
+				err := startFetchIssuesWithChannel(childCtx, c)
+				log.Printf("%+v\n", err)
+				err = sendErrToSlack(err)
 				if err != nil {
-					panic(err)
+					log.Printf("%+v\n", err)
 				}
-			} else {
-				qs = c.queries
-			}
-
-			for _, q := range qs {
-				err := startFetchIssuesFor(ctx, client, c.id, q)
-				if err != nil {
-					panic(err)
-				}
+				cancel()
 			}
 		}(c)
 	}
@@ -52,7 +49,53 @@ func StartFetchIssues(ctx context.Context) error {
 	return nil
 }
 
-func startFetchIssuesFor(ctx context.Context, client *github.Client, channelID int, queryBase string) error {
+type SlackMsg struct {
+	Text string `json:"text"`
+}
+
+func sendErrToSlack(err error) error {
+	addr := os.Getenv("KORAT_ERRORS_SLACK_HOOK_URL")
+	if addr == "" {
+		return errors.New("KORAT_ERRORS_SLACK_HOOK_URL is empty.")
+	}
+	params, err := json.Marshal(SlackMsg{fmt.Sprintf("```\n%+v\n```", err)})
+	if err != nil {
+		return err
+	}
+	_, err = http.PostForm(addr, url.Values{"payload": {string(params)}})
+	return err
+}
+
+func startFetchIssuesWithChannel(ctx context.Context, c Channel) error {
+	client := ghClient(ctx, c.account.accessToken)
+	var qs []string
+	if c.system.Valid == true {
+		var err error
+		qs, err = buildSystemQueries(ctx, c.system.String, client)
+		if err != nil {
+			return err
+		}
+	} else {
+		qs = c.queries
+	}
+
+	errCh := make(chan error)
+	for _, q := range qs {
+		err := startFetchIssuesFor(ctx, client, c.id, q, errCh)
+		if err != nil {
+			return err
+		}
+	}
+	for err := range errCh {
+		if err != nil {
+			return err
+		}
+	}
+
+	return errors.New("Unreachable")
+}
+
+func startFetchIssuesFor(ctx context.Context, client *github.Client, channelID int, queryBase string, errCh chan<- error) error {
 	cnt, err := fetchAndSaveIssue(ctx, client, channelID, &fetchIssueQuery{base: queryBase})
 	if err != nil {
 		return err
@@ -60,18 +103,13 @@ func startFetchIssuesFor(ctx context.Context, client *github.Client, channelID i
 
 	if cnt > 1 {
 		go func() {
-			err := fetchOldIssues(ctx, client, channelID, queryBase)
-			if err != nil {
-				panic(err)
-			}
+			errCh <- fetchOldIssues(ctx, client, channelID, queryBase)
 		}()
 	}
 	go func() {
-		err := fetchNewIssues(ctx, client, channelID, queryBase)
-		if err != nil {
-			panic(err)
-		}
+		errCh <- fetchNewIssues(ctx, client, channelID, queryBase)
 	}()
+
 	return nil
 }
 
