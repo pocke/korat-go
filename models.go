@@ -398,8 +398,13 @@ func includeAssigneesToIssues(ctx context.Context, issues []*Issue) error {
 
 var RepoFromIssueUrlRe = regexp.MustCompile(`/([^/]+)/([^/]+)/issues/\d+$`)
 
-func ImportIssues(ctx context.Context, issues []github.Issue, channelID int) error {
+func ImportIssues(ctx context.Context, issues []github.Issue, channelID int, query string) error {
 	return tx(func(tx *sql.Tx) error {
+		qid, err := findOrCreateQuery(ctx, query, tx)
+		if err != nil {
+			return err
+		}
+
 		for _, i := range issues {
 			url := i.GetURL()
 			m := RepoFromIssueUrlRe.FindStringSubmatch(url)
@@ -475,9 +480,9 @@ func ImportIssues(ctx context.Context, issues []github.Issue, channelID int) err
 
 			_, err = tx.ExecContext(ctx, `
 				replace into channel_issues
-				(issueID, channelID)
-				values (?, ?)
-			`, id, channelID)
+				(issueID, channelID, queryID)
+				values (?, ?, ?)
+			`, id, channelID, qid)
 			if err != nil {
 				return err
 			}
@@ -485,6 +490,26 @@ func ImportIssues(ctx context.Context, issues []github.Issue, channelID int) err
 		}
 		return nil
 	})
+}
+
+func findOrCreateQuery(ctx context.Context, query string, tx sqlConn) (int, error) {
+	var id int
+	err := tx.QueryRowContext(ctx, `select id from queries where query = ?`, query).Scan(&id)
+	if err == sql.ErrNoRows {
+		res, err := tx.ExecContext(ctx, `insert into queries (query) VALUES (?)`, query)
+		if err != nil {
+			return 0, err
+		}
+		id, err := res.LastInsertId()
+		if err != nil {
+			return 0, err
+		}
+		return (int)(id), nil
+	} else if err != nil {
+		return 0, err
+	}
+
+	return id, nil
 }
 
 func importLabels(ctx context.Context, issue github.Issue, tx *sql.Tx) error {
@@ -589,31 +614,17 @@ func parseTime(s string) (time.Time, error) {
 	return time.Parse(time.RFC3339, s)
 }
 
-func OldestIssueTime(ctx context.Context, channelID int) (time.Time, error) {
-	var t string
-	err := Conn.QueryRowContext(ctx, `
-		select
-			i.updatedAt
-		from
-			issues as i,
-			channel_issues as ci
-		where
-			i.id = ci.issueID AND
-			ci.channelID = ?
-		order by i.updatedAt
-		limit 1
-		;
-`, channelID).Scan(&t)
-	if err != nil {
-		return time.Time{}, err
-	}
-
-	return parseTime(t)
+func OldestIssueTime(ctx context.Context, queryID int) (time.Time, error) {
+	return findEdgeIssueTime(ctx, queryID, "asc")
 }
 
-func NewestIssueTime(ctx context.Context, channelID int) (time.Time, error) {
+func NewestIssueTime(ctx context.Context, queryID int) (time.Time, error) {
+	return findEdgeIssueTime(ctx, queryID, "desc")
+}
+
+func findEdgeIssueTime(ctx context.Context, queryID int, ascDesc string) (time.Time, error) {
 	var t string
-	err := Conn.QueryRowContext(ctx, `
+	err := Conn.QueryRowContext(ctx, fmt.Sprintf(`
 		select
 			i.updatedAt
 		from
@@ -621,11 +632,11 @@ func NewestIssueTime(ctx context.Context, channelID int) (time.Time, error) {
 			channel_issues as ci
 		where
 			i.id = ci.issueID AND
-			ci.channelID = ?
-		order by i.updatedAt desc
+			ci.queryID = ?
+		order by i.updatedAt %s
 		limit 1
 		;
-`, channelID).Scan(&t)
+`, ascDesc), queryID).Scan(&t)
 	if err != nil {
 		return time.Time{}, err
 	}

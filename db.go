@@ -120,15 +120,21 @@ func dbMigrate() error {
 	}
 
 	err = doMigration(2, `
+		create table queries (
+			id            integer not null primary key,
+			query         string not null
+		);
+
 		create table channel_issues (
 			id            integer not null primary key,
 			issueID       integer not null,
 			channelID     integer not null,
+			queryID       integer not null,
 
 			FOREIGN KEY(issueID) REFERENCES issues(id)
 			FOREIGN KEY(channelID) REFERENCES channels(id)
 		);
-		create unique index uniq_channel_issue on channel_issues(issueID, channelID);
+		create unique index uniq_channel_issue on channel_issues(issueID, channelID, queryID);
 	`)
 	if err != nil {
 		return errors.WithStack(err)
@@ -205,12 +211,12 @@ func init() {
 	}
 }
 
-type QueryRowable interface {
-	QueryRow(string, ...interface{}) *sql.Row
+type sqlConn interface {
 	QueryRowContext(context.Context, string, ...interface{}) *sql.Row
+	ExecContext(context.Context, string, ...interface{}) (sql.Result, error)
 }
 
-func rowExist(ctx context.Context, tbl string, id int, conn QueryRowable) (bool, error) {
+func rowExist(ctx context.Context, tbl string, id int, conn sqlConn) (bool, error) {
 	row := conn.QueryRowContext(ctx, fmt.Sprintf(`select 1 from %s where id = ?`, tbl), id)
 	var blackhole int
 	err := row.Scan(&blackhole)

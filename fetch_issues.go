@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"time"
 
 	"github.com/google/go-github/v21/github"
@@ -31,7 +32,7 @@ func StartFetchIssues(ctx context.Context) error {
 }
 
 func startFetchIssuesFor(ctx context.Context, client *github.Client, channelID int, queryBase string) error {
-	cnt, err := fetchAndSaveIssue(ctx, client, channelID, queryBase)
+	cnt, err := fetchAndSaveIssue(ctx, client, channelID, &fetchIssueQuery{base: queryBase})
 	if err != nil {
 		return err
 	}
@@ -53,7 +54,20 @@ func startFetchIssuesFor(ctx context.Context, client *github.Client, channelID i
 	return nil
 }
 
-func fetchAndSaveIssue(ctx context.Context, client *github.Client, channelID int, query string) (int, error) {
+type fetchIssueQuery struct {
+	base string
+	cond string
+}
+
+func (q *fetchIssueQuery) build() string {
+	if q.cond == "" {
+		return q.base
+	} else {
+		return q.base + " " + q.cond
+	}
+}
+
+func fetchAndSaveIssue(ctx context.Context, client *github.Client, channelID int, query *fetchIssueQuery) (int, error) {
 	opt := &github.SearchOptions{
 		Sort: "updated",
 		ListOptions: github.ListOptions{
@@ -61,12 +75,12 @@ func fetchAndSaveIssue(ctx context.Context, client *github.Client, channelID int
 		},
 	}
 	deqSearchIssueQueue()
-	issues, _, err := client.Search.Issues(ctx, query, opt)
+	issues, _, err := client.Search.Issues(ctx, query.build(), opt)
 	if err != nil {
 		return -1, err
 	}
 
-	err = ImportIssues(ctx, issues.Issues, channelID)
+	err = ImportIssues(ctx, issues.Issues, channelID, query.base)
 	if err != nil {
 		return -1, err
 	}
@@ -79,31 +93,53 @@ func fetchAndSaveIssue(ctx context.Context, client *github.Client, channelID int
 }
 
 func fetchOldIssues(ctx context.Context, client *github.Client, channelID int, queryBase string) error {
-	oldestUpdatedAt, err := OldestIssueTime(ctx, channelID)
+	var qid int
+	err := tx(func(tx *sql.Tx) error {
+		var err error
+		qid, err = findOrCreateQuery(ctx, queryBase, Conn)
+		return err
+	})
 	if err != nil {
 		return err
 	}
 
-	q := queryBase + " updated:<=" + fmtTime(oldestUpdatedAt)
-	cnt, err := fetchAndSaveIssue(ctx, client, channelID, q)
-	if err != nil {
-		return err
-	}
-	if cnt > 1 {
-		return fetchOldIssues(ctx, client, channelID, queryBase)
+	for {
+		oldestUpdatedAt, err := OldestIssueTime(ctx, qid)
+		if err != nil {
+			return err
+		}
+
+		q := &fetchIssueQuery{base: queryBase, cond: "updated:<=" + fmtTime(oldestUpdatedAt)}
+		cnt, err := fetchAndSaveIssue(ctx, client, channelID, q)
+		if err != nil {
+			return err
+		}
+		if cnt <= 1 {
+			break
+		}
 	}
 
 	return nil
 }
 
 func fetchNewIssues(ctx context.Context, client *github.Client, channelID int, queryBase string) error {
+	var qid int
+	err := tx(func(tx *sql.Tx) error {
+		var err error
+		qid, err = findOrCreateQuery(ctx, queryBase, Conn)
+		return err
+	})
+	if err != nil {
+		return err
+	}
+
 	for {
-		newestUpdatedAt, err := NewestIssueTime(ctx, channelID)
+		newestUpdatedAt, err := NewestIssueTime(ctx, qid)
 		if err != nil {
 			return err
 		}
 
-		q := queryBase + " updated:>=" + fmtTime(newestUpdatedAt)
+		q := &fetchIssueQuery{base: queryBase, cond: "updated:>=" + fmtTime(newestUpdatedAt)}
 		_, err = fetchAndSaveIssue(ctx, client, channelID, q)
 		if err != nil {
 			return err
