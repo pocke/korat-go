@@ -177,7 +177,7 @@ func UnreadCountForIssue(ctx context.Context, issueIDs []int) ([]*UnreadCount, e
 	}
 
 	rows, err := Conn.QueryContext(ctx, fmt.Sprintf(`
-		select
+		select distinct
 			channelID
 		from
 			channel_issues
