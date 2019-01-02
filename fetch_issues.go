@@ -21,25 +21,26 @@ func StartFetchIssues(ctx context.Context) error {
 	}
 
 	for _, c := range chs {
-		client := ghClient(ctx, c.account.accessToken)
-		var qs []string
-		if c.system.Valid == true {
-			var err error
-			qs, err = buildSystemQueries(ctx, c.system.String, client)
-			if err != nil {
-				return err
-			}
-		} else {
-			qs = c.queries
-		}
-
-		for _, q := range qs {
-			err := startFetchIssuesFor(ctx, client, c.id, q)
-			if err != nil {
-				return err
+		go func(c Channel) {
+			client := ghClient(ctx, c.account.accessToken)
+			var qs []string
+			if c.system.Valid == true {
+				var err error
+				qs, err = buildSystemQueries(ctx, c.system.String, client)
+				if err != nil {
+					panic(err)
+				}
+			} else {
+				qs = c.queries
 			}
 
-		}
+			for _, q := range qs {
+				err := startFetchIssuesFor(ctx, client, c.id, q)
+				if err != nil {
+					panic(err)
+				}
+			}
+		}(c)
 	}
 
 	return nil
@@ -220,6 +221,9 @@ func buildSystemQueries(ctx context.Context, kind string, client *github.Client)
 		}
 
 		return []string{strings.Join(q, " ")}, nil
+	case "watched":
+		// TODO
+		return nil, nil
 	default:
 		return nil, errors.Errorf("%s is not a valid system type.", kind)
 	}
