@@ -423,9 +423,14 @@ func ImportIssues(ctx context.Context, issues []github.Issue, channelID int, que
 			}
 
 			id := i.GetID()
-			exist, err := rowExist(ctx, "issues", (int)(id), tx)
-			if err != nil {
+			prevUpdatedAt, prevAlreadyRead, err := issueUpdatedAtAndAlreadyRead(ctx, (int)(id), tx)
+			var exist bool
+			if err == sql.ErrNoRows {
+				exist = false
+			} else if err != nil {
 				return err
+			} else {
+				exist = true
 			}
 
 			createdAt := fmtTime(i.GetCreatedAt())
@@ -454,18 +459,22 @@ func ImportIssues(ctx context.Context, issues []github.Issue, channelID int, que
 			if exist {
 				_, err = tx.ExecContext(ctx, `
 					update issues
-					set number = ?, title = ?, userID = ?, repoOwner = ?, repoName = ?, state = ?, locked = ?, comments = ?, createdAt = ?, updatedAt = ?, closedAt = ?, isPullRequest = ?, body = ?, milestoneID = ?
+					set number = ?, title = ?, userID = ?, repoOwner = ?, repoName = ?, state = ?, locked = ?, comments = ?,
+					createdAt = ?, updatedAt = ?, closedAt = ?, isPullRequest = ?, body = ?, milestoneID = ?, alreadyRead = ?
 					where id = ?
-				`, i.GetNumber(), i.GetTitle(), userID, repoOwner, repoName, i.GetState(), i.GetLocked(), i.GetComments(), createdAt, updatedAt, closedAt, i.IsPullRequest(), i.GetBody(), milestoneID, id)
+				`, i.GetNumber(), i.GetTitle(), userID, repoOwner, repoName, i.GetState(), i.GetLocked(), i.GetComments(),
+					createdAt, updatedAt, closedAt, i.IsPullRequest(), i.GetBody(), milestoneID, prevAlreadyRead && prevUpdatedAt.Equal(i.GetUpdatedAt()), id)
 				if err != nil {
 					return err
 				}
 			} else {
 				_, err = tx.ExecContext(ctx, `
 					insert into issues
-					(id, number, title, userID, repoOwner, repoName, state, locked, comments, createdAt, updatedAt, closedAt, isPullRequest, body, alreadyRead, milestoneID)
+					(id, number, title, userID, repoOwner, repoName, state, locked, comments,
+					createdAt, updatedAt, closedAt, isPullRequest, body, alreadyRead, milestoneID)
 					VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-				`, id, i.GetNumber(), i.GetTitle(), userID, repoOwner, repoName, i.GetState(), i.GetLocked(), i.GetComments(), createdAt, updatedAt, closedAt, i.IsPullRequest(), i.GetBody(), false, milestoneID)
+				`, id, i.GetNumber(), i.GetTitle(), userID, repoOwner, repoName, i.GetState(), i.GetLocked(), i.GetComments(),
+					createdAt, updatedAt, closedAt, i.IsPullRequest(), i.GetBody(), false, milestoneID)
 				if err != nil {
 					return err
 				}
@@ -490,6 +499,20 @@ func ImportIssues(ctx context.Context, issues []github.Issue, channelID int, que
 		}
 		return nil
 	})
+}
+
+func issueUpdatedAtAndAlreadyRead(ctx context.Context, issueID int, c sqlConn) (time.Time, bool, error) {
+	var updatedAt string
+	var read bool
+	err := c.QueryRowContext(ctx, `select updatedAt, alreadyRead from issues where id = ?`, issueID).Scan(&updatedAt, &read)
+	if err != nil {
+		return time.Time{}, false, err
+	}
+	u, err := parseTime(updatedAt)
+	if err != nil {
+		return time.Time{}, false, err
+	}
+	return u, read, nil
 }
 
 func findOrCreateQuery(ctx context.Context, query string, tx sqlConn) (int, error) {
