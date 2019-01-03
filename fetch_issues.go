@@ -96,16 +96,9 @@ func startFetchIssuesWithChannel(ctx context.Context, c Channel) error {
 }
 
 func startFetchIssuesFor(ctx context.Context, client *github.Client, channelID int, queryBase string, errCh chan<- error) error {
-	cnt, err := fetchAndSaveIssue(ctx, client, channelID, &fetchIssueQuery{base: queryBase}, "desc")
-	if err != nil {
-		return err
-	}
-
-	if cnt > 1 {
-		go func() {
-			errCh <- fetchOldIssues(ctx, client, channelID, queryBase)
-		}()
-	}
+	go func() {
+		errCh <- fetchOldIssues(ctx, client, channelID, queryBase)
+	}()
 	go func() {
 		errCh <- fetchNewIssues(ctx, client, channelID, queryBase)
 	}()
@@ -128,7 +121,8 @@ func (q *fetchIssueQuery) build() string {
 
 func fetchAndSaveIssue(ctx context.Context, client *github.Client, channelID int, query *fetchIssueQuery, order string) (int, error) {
 	opt := &github.SearchOptions{
-		Sort: "updated",
+		Sort:  "updated",
+		Order: order,
 		ListOptions: github.ListOptions{
 			PerPage: 100,
 		},
@@ -164,7 +158,9 @@ func fetchOldIssues(ctx context.Context, client *github.Client, channelID int, q
 
 	for {
 		oldestUpdatedAt, err := OldestIssueTime(ctx, qid)
-		if err != nil {
+		if err == sql.ErrNoRows {
+			oldestUpdatedAt = time.Now().UTC()
+		} else if err != nil {
 			return err
 		}
 
@@ -194,7 +190,9 @@ func fetchNewIssues(ctx context.Context, client *github.Client, channelID int, q
 
 	for {
 		newestUpdatedAt, err := NewestIssueTime(ctx, qid)
-		if err != nil {
+		if err == sql.ErrNoRows {
+			newestUpdatedAt = time.Now()
+		} else if err != nil {
 			return err
 		}
 
