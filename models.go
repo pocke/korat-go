@@ -86,17 +86,20 @@ func SelectChannelsUnreadCount(ctx context.Context) ([]*UnreadCount, error) {
 
 	rows, err := Conn.QueryContext(ctx, `
 		select
-			c.id, count(i.id)
+			X.channelID, count(X.issueID)
 		from
-			channels as c,
-			channel_issues as ci,
-			issues as i
-		where
-			c.id = ci.channelID AND
-			i.id = ci.issueID AND
-			i.alreadyRead = 0
+			(
+				select distinct
+					channelID, issueID
+				from
+					channel_issues as ci,
+					issues as i
+				where
+					ci.issueID = i.id AND
+					i.alreadyRead = 0
+			) as X
 		group by
-			c.id
+			X.channelID
 	`)
 	if err != nil {
 		return nil, err
@@ -206,16 +209,21 @@ func UnreadCountForIssue(ctx context.Context, issueIDs []int) ([]*UnreadCount, e
 
 	rows, err = Conn.QueryContext(ctx, fmt.Sprintf(`
 		select
-			ci.channelID, count(i.id)
+			X.channelID, count(X.issueID)
 		from
-			channel_issues as ci,
-			issues as i
-		where
-			ci.issueID = i.ID AND
-			ci.channelID IN (%s) AND
-			i.alreadyRead = 0
+			(
+				select distinct
+					channelID, issueID
+				from
+					channel_issues as ci,
+					issues as i
+				where
+					ci.issueID = i.id AND
+					ci.channelID IN (%s) AND
+					i.alreadyRead = 0
+			) as X
 		group by
-			ci.channelID
+			X.channelID
 	`, strings.Join(channelIDs, ",")))
 	if err != nil {
 		return nil, err
