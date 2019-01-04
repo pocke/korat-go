@@ -150,6 +150,15 @@ func dbMigrate() error {
 		return errors.WithStack(err)
 	}
 
+	// Change order of index
+	err = doMigration(4, `
+		drop index uniq_channel_issue;
+		create unique index uniq_channel_issue on channel_issues(channelID, issueID, queryID);
+	`)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
 	return nil
 }
 
