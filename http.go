@@ -53,15 +53,27 @@ func accountsIndex(c echo.Context) error {
 	return c.JSON(http.StatusOK, accounts)
 }
 
+type SearchIssuesQuery struct {
+	page       int
+	perPage    int
+	channelID  int
+	onlyUnread bool
+}
+
 func issuesIndex(c echo.Context) error {
 	channelID, err := strconv.Atoi(c.Param("channelID"))
 	if err != nil {
 		return err
 	}
-	// TODO
-	page := 1
-	perPage := 100
-	issues, err := SelectIssues(c.Request().Context(), channelID, page, perPage)
+	onlyUnread := c.QueryParam("onlyUnread") != ""
+	// TODO: set page and per page
+	q := &SearchIssuesQuery{
+		page:       1,
+		perPage:    100,
+		channelID:  channelID,
+		onlyUnread: onlyUnread,
+	}
+	issues, err := SelectIssues(c.Request().Context(), q)
 	if err != nil {
 		return err
 	}
@@ -69,6 +81,7 @@ func issuesIndex(c echo.Context) error {
 
 	return nil
 }
+
 func issuesMarkAsRead(c echo.Context) error {
 	return handleAlreadyRead(c, true)
 }

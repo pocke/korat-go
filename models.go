@@ -278,9 +278,13 @@ type User struct {
 	AvatarURL string
 }
 
-func SelectIssues(ctx context.Context, channelID, page, perPage int) ([]*Issue, error) {
+func SelectIssues(ctx context.Context, q *SearchIssuesQuery) ([]*Issue, error) {
 	res := make([]*Issue, 0)
-	rows, err := Conn.QueryContext(ctx, `
+	onlyUnread := ""
+	if q.onlyUnread {
+		onlyUnread = "AND i.alreadyRead = 0"
+	}
+	rows, err := Conn.QueryContext(ctx, fmt.Sprintf(`
 		select distinct
 			i.id, i.number, i.title, i.repoOwner, i.repoName, i.state, i.locked, i.comments, i.createdAt, i.updatedAt, i.closedAt, i.isPullREquest, i.body, i.alreadyRead,
 			u.id, u.login, u.avatarURL
@@ -292,6 +296,7 @@ func SelectIssues(ctx context.Context, channelID, page, perPage int) ([]*Issue, 
 			i.id = ci.issueID AND
 			u.id = i.userID AND
 			ci.channelID = ?
+			%s
 		order by
 			i.updatedAt desc
 		limit
@@ -299,7 +304,7 @@ func SelectIssues(ctx context.Context, channelID, page, perPage int) ([]*Issue, 
 		offset
 			?
 		;
-	`, channelID, perPage, (page-1)*perPage)
+	`, onlyUnread), q.channelID, q.perPage, (q.page-1)*q.perPage)
 	if err != nil {
 		return nil, err
 	}
