@@ -159,6 +159,13 @@ func dbMigrate() error {
 		return errors.WithStack(err)
 	}
 
+	err = doMigration(5, `
+		alter table issues add column merged boolean;
+	`)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
 	return nil
 }
 

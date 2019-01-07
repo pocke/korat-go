@@ -10,6 +10,12 @@ func main() {
 			panic(err)
 		}
 	}()
+	go func() {
+		err := StartDetermineMerged(ctx)
+		if err != nil {
+			panic(err)
+		}
+	}()
 	go StartHTTPServer(5427)
 	select {}
 }

@@ -688,3 +688,57 @@ func UpdateIssueAlreadyRead(ctx context.Context, issueID int, alreadyRead bool) 
 	`, alreadyRead, issueID)
 	return err
 }
+
+type AccountForGitHubAPI struct {
+	accessToken string
+	id          int
+}
+
+func SelectAccounts(ctx context.Context) ([]*AccountForGitHubAPI, error) {
+
+	rows, err := Conn.QueryContext(ctx, `select id, accessToken from accounts`)
+	if err != nil {
+		return nil, err
+	}
+
+	res := make([]*AccountForGitHubAPI, 0)
+
+	for rows.Next() {
+		a := &AccountForGitHubAPI{}
+		err := rows.Scan(&a.id, &a.accessToken)
+		if err != nil {
+			return nil, err
+		}
+		res = append(res, a)
+	}
+	return res, nil
+}
+
+func SelectUndeterminedPullRequest(ctx context.Context, accountID int) (id int, owner string, repo string, number int, err error) {
+	t := fmtTime(time.Now().Add(-3 * 24 * time.Hour))
+	err = Conn.QueryRowContext(ctx, `
+		select i.id, i.repoOwner, i.repoName, i.number
+		from
+			issues as i,
+			channel_issues as ci,
+			channels as c
+		where
+			i.id = ci.issueID AND
+			ci.channelID = c.id AND
+			c.accountID = ? AND
+			i.isPullRequest = 1 AND
+			i.merged is null AND
+			i.closedAt is not null AND
+			i.updatedAt > ?
+	`, accountID, t).Scan(&id, &owner, &repo, &number)
+	return
+}
+
+func DetermineMerged(ctx context.Context, issueID int, merged bool) error {
+	_, err := Conn.ExecContext(ctx, `
+		update issues
+		set merged = ?
+		where id = ?
+	`, merged, issueID)
+	return err
+}
