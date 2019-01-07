@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"log"
 	"time"
 )
@@ -35,7 +36,9 @@ func startDetermineMerged(ctx context.Context, account *AccountForGitHubAPI) err
 	for {
 		time.Sleep(3 * time.Second)
 		id, owner, name, number, err := SelectUndeterminedPullRequest(ctx, account.id)
-		if err != nil {
+		if err == sql.ErrNoRows {
+			continue
+		} else if err != nil {
 			return err
 		}
 		pr, _, err := client.PullRequests.Get(ctx, owner, name, number)
