@@ -244,6 +244,28 @@ func UnreadCountForIssue(ctx context.Context, issueIDs []int) ([]*UnreadCount, e
 	return res, nil
 }
 
+type NullStringJSON struct {
+	sql.NullString
+}
+
+func (n NullStringJSON) MarshalJSON() ([]byte, error) {
+	if n.Valid {
+		return json.Marshal(n.String)
+	}
+	return []byte("null"), nil
+}
+
+type NullBoolJSON struct {
+	sql.NullBool
+}
+
+func (n NullBoolJSON) MarshalJSON() ([]byte, error) {
+	if n.Valid {
+		return json.Marshal(n.Bool)
+	}
+	return []byte("null"), nil
+}
+
 type Issue struct {
 	ID            int
 	Number        int
@@ -255,10 +277,11 @@ type Issue struct {
 	Comments      int
 	CreatedAt     string
 	UpdatedAt     string
-	ClosedAt      sql.NullString
+	ClosedAt      NullStringJSON
 	IsPullRequest bool
 	Body          string
 	AlreadyRead   bool
+	Merged        NullBoolJSON
 
 	User      *User
 	Labels    []*Label
@@ -286,7 +309,7 @@ func SelectIssues(ctx context.Context, q *SearchIssuesQuery) ([]*Issue, error) {
 	}
 	rows, err := Conn.QueryContext(ctx, fmt.Sprintf(`
 		select distinct
-			i.id, i.number, i.title, i.repoOwner, i.repoName, i.state, i.locked, i.comments, i.createdAt, i.updatedAt, i.closedAt, i.isPullREquest, i.body, i.alreadyRead,
+			i.id, i.number, i.title, i.repoOwner, i.repoName, i.state, i.locked, i.comments, i.createdAt, i.updatedAt, i.closedAt, i.isPullREquest, i.body, i.alreadyRead, i.merged,
 			u.id, u.login, u.avatarURL
 		from
 			issues as i,
@@ -317,7 +340,7 @@ func SelectIssues(ctx context.Context, q *SearchIssuesQuery) ([]*Issue, error) {
 			Assignees: []*User{},
 			User:      u,
 		}
-		err := rows.Scan(&i.ID, &i.Number, &i.Title, &i.RepoOwner, &i.RepoName, &i.State, &i.Locked, &i.Comments, &i.CreatedAt, &i.UpdatedAt, &i.ClosedAt, &i.IsPullRequest, &i.Body, &i.AlreadyRead,
+		err := rows.Scan(&i.ID, &i.Number, &i.Title, &i.RepoOwner, &i.RepoName, &i.State, &i.Locked, &i.Comments, &i.CreatedAt, &i.UpdatedAt, &i.ClosedAt, &i.IsPullRequest, &i.Body, &i.AlreadyRead, &i.Merged,
 			&u.ID, &u.Login, &u.AvatarURL)
 		if err != nil {
 			return nil, err
