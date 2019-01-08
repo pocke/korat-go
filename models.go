@@ -303,10 +303,8 @@ type User struct {
 
 func SelectIssues(ctx context.Context, q *SearchIssuesQuery) ([]*Issue, error) {
 	res := make([]*Issue, 0)
-	onlyUnread := ""
-	if q.onlyUnread {
-		onlyUnread = "AND i.alreadyRead = 0"
-	}
+	additionalConds := buildFilterForSelectIssues(q.filter)
+
 	rows, err := Conn.QueryContext(ctx, fmt.Sprintf(`
 		select distinct
 			i.id, i.number, i.title, i.repoOwner, i.repoName, i.state, i.locked, i.comments, i.createdAt, i.updatedAt, i.closedAt, i.isPullREquest, i.body, i.alreadyRead, i.merged,
@@ -327,7 +325,7 @@ func SelectIssues(ctx context.Context, q *SearchIssuesQuery) ([]*Issue, error) {
 		offset
 			?
 		;
-	`, onlyUnread), q.channelID, q.perPage, (q.page-1)*q.perPage)
+	`, additionalConds), q.channelID, q.perPage, (q.page-1)*q.perPage)
 	if err != nil {
 		return nil, err
 	}
@@ -356,6 +354,43 @@ func SelectIssues(ctx context.Context, q *SearchIssuesQuery) ([]*Issue, error) {
 	}
 
 	return res, nil
+}
+
+func buildFilterForSelectIssues(f *SearchIssueFilter) string {
+	res := ""
+	if f.Issue && !f.PullRequest {
+		res += " AND i.isPullRequest = 0 "
+	}
+	if !f.Issue && f.PullRequest {
+		res += " AND i.isPullRequest = 1 "
+	}
+
+	if f.Read && !f.Unread {
+		res += " AND i.alreadyRead = 1 "
+	}
+	if !f.Read && f.Unread {
+		res += " AND i.alreadyRead = 0 "
+	}
+
+	if f.Closed && f.Open && f.Merged {
+		return res
+	}
+
+	s := []string{}
+
+	if f.Closed {
+		s = append(s, `(i.isPullRequest = 0 AND i.closedAt is not null)`, `(i.isPullRequest = 1 AND i.merged = 0)`)
+	}
+	if f.Open {
+		s = append(s, `(i.closedAt is null)`)
+	}
+	if f.Merged {
+		s = append(s, `(i.merged = 1)`)
+	}
+
+	res += fmt.Sprintf(" AND (%s)", strings.Join(s, " OR "))
+
+	return res
 }
 
 func includeLabelsToIssues(ctx context.Context, issues []*Issue) error {

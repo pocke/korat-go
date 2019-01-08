@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -54,10 +55,22 @@ func accountsIndex(c echo.Context) error {
 }
 
 type SearchIssuesQuery struct {
-	page       int
-	perPage    int
-	channelID  int
-	onlyUnread bool
+	page      int
+	perPage   int
+	channelID int
+	filter    *SearchIssueFilter
+}
+
+type SearchIssueFilter struct {
+	Issue       bool
+	PullRequest bool
+
+	Read   bool
+	Unread bool
+
+	Closed bool
+	Open   bool
+	Merged bool
 }
 
 func issuesIndex(c echo.Context) error {
@@ -65,14 +78,18 @@ func issuesIndex(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	onlyUnread := c.QueryParam("onlyUnread") != ""
 	// TODO: set page and per page
 	q := &SearchIssuesQuery{
-		page:       1,
-		perPage:    100,
-		channelID:  channelID,
-		onlyUnread: onlyUnread,
+		page:      1,
+		perPage:   100,
+		channelID: channelID,
+		filter:    &SearchIssueFilter{},
 	}
+	err = json.Unmarshal([]byte(c.QueryParam("filter")), q.filter)
+	if err != nil {
+		return err
+	}
+
 	issues, err := SelectIssues(c.Request().Context(), q)
 	if err != nil {
 		return err
