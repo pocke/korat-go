@@ -23,3 +23,10 @@ $ GITHUB_ACCESS_TOKEN=xxx ./dev_seed_data.sh
 # start server
 $ korat-go
 ```
+
+Build binaries for each platform
+---
+
+```
+$ make
+```
