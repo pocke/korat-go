@@ -46,7 +46,7 @@ func dbMigrate() error {
 
 			accountID     integer not null,
 
-			FOREIGN KEY(accountID) REFERENCES accounts(id)
+			FOREIGN KEY(accountID) REFERENCES accounts(id) ON UPDATE CASCADE ON DELETE CASCADE
 		);
 
 		create table github_users (
@@ -73,8 +73,8 @@ func dbMigrate() error {
 			alreadyRead   boolean not null,
 			milestoneID   integer,
 
-			FOREIGN KEY(userID) REFERENCES github_users(id)
-			FOREIGN KEY(milestoneID) REFERENCES milestones(id)
+			FOREIGN KEY(userID) REFERENCES github_users(id) ON UPDATE CASCADE ON DELETE CASCADE
+			FOREIGN KEY(milestoneID) REFERENCES milestones(id) ON UPDATE CASCADE ON DELETE CASCADE
 		);
 
 		create table labels (
@@ -100,8 +100,8 @@ func dbMigrate() error {
 			issueID     integer not null,
 			labelID     integer not null,
 
-			FOREIGN KEY(issueID) REFERENCES issues(id)
-			FOREIGN KEY(labelID) REFERENCES labels(id)
+			FOREIGN KEY(issueID) REFERENCES issues(id) ON UPDATE CASCADE ON DELETE CASCADE
+			FOREIGN KEY(labelID) REFERENCES labels(id) ON UPDATE CASCADE ON DELETE CASCADE
 		);
 		create unique index uniq_issue_label on assigned_labels_to_issue(issueID, labelID);
 
@@ -110,8 +110,8 @@ func dbMigrate() error {
 			issueID     integer not null,
 			userID      integer not null,
 
-			FOREIGN KEY(issueID) REFERENCES issues(id)
-			FOREIGN KEY(userID) REFERENCES github_users(id)
+			FOREIGN KEY(issueID) REFERENCES issues(id) ON UPDATE CASCADE ON DELETE CASCADE
+			FOREIGN KEY(userID) REFERENCES github_users(id) ON UPDATE CASCADE ON DELETE CASCADE
 		);
 		create unique index uniq_assigned_user_to_issue on assigned_users_to_issue(issueID, userID);
 	`)
@@ -131,9 +131,9 @@ func dbMigrate() error {
 			channelID     integer not null,
 			queryID       integer not null,
 
-			FOREIGN KEY(issueID) REFERENCES issues(id)
-			FOREIGN KEY(channelID) REFERENCES channels(id)
-			FOREIGN KEY(queryID) REFERENCES queries(id)
+			FOREIGN KEY(issueID) REFERENCES issues(id) ON UPDATE CASCADE ON DELETE CASCADE
+			FOREIGN KEY(channelID) REFERENCES channels(id) ON UPDATE CASCADE ON DELETE CASCADE
+			FOREIGN KEY(queryID) REFERENCES queries(id) ON UPDATE CASCADE ON DELETE CASCADE
 		);
 		create unique index uniq_channel_issue on channel_issues(issueID, channelID, queryID);
 	`)
