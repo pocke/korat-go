@@ -540,7 +540,7 @@ func ImportIssues(ctx context.Context, issues []github.Issue, channelID int, que
 				}
 			} else {
 				// If issue is too old, it is marked as read
-				alreadyRead := i.GetUpdatedAt().Before(time.Now().Add(-24 * 365 * time.Hour))
+				alreadyRead := i.GetUpdatedAt().Before(time.Now().Add(-24 * 30 * time.Hour))
 				_, err = tx.ExecContext(ctx, `
 					insert into issues
 					(id, number, title, userID, repoOwner, repoName, state, locked, comments,
