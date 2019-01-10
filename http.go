@@ -23,6 +23,7 @@ func StartHTTPServer(port int) {
 	}))
 
 	e.GET("/accounts", accountsIndex)
+	e.POST("/accounts", accountsCreate)
 	e.GET("/channels/:channelID/issues", issuesIndex)
 	e.PATCH("/issues/:issueID/markAsRead", issuesMarkAsRead)
 	e.PATCH("/issues/:issueID/markAsUnread", issuesMarkAsUnread)
@@ -52,6 +53,22 @@ func accountsIndex(c echo.Context) error {
 		return err
 	}
 	return c.JSON(http.StatusOK, accounts)
+}
+
+type AccountCreateParam struct {
+	DisplayName string `json:"displayName"`
+	UrlBase     string `json:"urlBase"`
+	ApiUrlBase  string `json:"apiUrlBase"`
+	AccessToken string `json:"accessToken"`
+}
+
+func accountsCreate(c echo.Context) error {
+	p := &AccountCreateParam{}
+	err := c.Bind(p)
+	if err != nil {
+		return err
+	}
+	return CreateAccount(c.Request().Context(), p)
 }
 
 type SearchIssuesQuery struct {

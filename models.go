@@ -802,3 +802,11 @@ func DetermineMerged(ctx context.Context, issueID int, merged bool) error {
 	`, merged, issueID)
 	return err
 }
+
+func CreateAccount(ctx context.Context, p *AccountCreateParam) error {
+	_, err := Conn.ExecContext(ctx, `
+		insert into accounts(displayName, urlBase, apiUrlBase, accessToken)
+		VALUES { ?, ?, ?, ? }
+	`, p.DisplayName, p.UrlBase, p.ApiUrlBase, p.AccessToken)
+	return err
+}
