@@ -32,10 +32,11 @@ func StartHTTPServer(port int) {
 }
 
 func accountsIndex(c echo.Context) error {
-	accounts, err := SelectAccounts()
-	if err != nil {
+	accounts := make([]Account, 0)
+	if err := gormConn.Preload("Channels").Find(&accounts).Error; err != nil {
 		return err
 	}
+
 	return c.JSON(http.StatusOK, accounts)
 }
 

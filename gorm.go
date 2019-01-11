@@ -62,14 +62,6 @@ type Channel struct {
 	AccountID   int `gorm:"column:accountID"`
 }
 
-func SelectAccounts() ([]Account, error) {
-	accounts := make([]Account, 0)
-	if err := gormConn.Preload("Channels").Find(&accounts).Error; err != nil {
-		return nil, err
-	}
-	return accounts, nil
-}
-
 func init() {
 	fname, err := homedir.Expand("~/.cache/korat/development.sqlite3")
 	if err != nil {
