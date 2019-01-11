@@ -176,7 +176,7 @@ type IssueOld struct {
 	AlreadyRead   bool
 	Merged        NullBoolJSON
 
-	UserOld   *UserOld
+	User      *UserOld
 	Labels    []*LabelOld
 	Assignees []*UserOld
 }
@@ -229,7 +229,7 @@ func SelectIssues(ctx context.Context, q *SearchIssuesQuery) ([]*IssueOld, error
 		i := &IssueOld{
 			Labels:    []*LabelOld{},
 			Assignees: []*UserOld{},
-			UserOld:   u,
+			User:      u,
 		}
 		err := rows.Scan(&i.ID, &i.Number, &i.Title, &i.RepoOwner, &i.RepoName, &i.State, &i.Locked, &i.Comments, &i.CreatedAt, &i.UpdatedAt, &i.ClosedAt, &i.IsPullRequest, &i.Body, &i.AlreadyRead, &i.Merged,
 			&u.ID, &u.Login, &u.AvatarURL)
