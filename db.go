@@ -4,24 +4,19 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"os"
 
-	"github.com/luna-duclos/instrumentedsql"
-	"github.com/mattn/go-sqlite3"
-	homedir "github.com/mitchellh/go-homedir"
+	"github.com/jinzhu/gorm"
 	"github.com/pkg/errors"
 )
 
-var Conn *sql.DB
-
 func dbMigrate() error {
-	row := Conn.QueryRow(`select name from sqlite_master where type='table' and name='migration_info'`)
+	row := gormConn.Raw(`select name from sqlite_master where type='table' and name='migration_info'`).Row()
 	var blackhole string
 	err := row.Scan(&blackhole)
 	if err == sql.ErrNoRows {
-		_, err := Conn.Exec(`create table migration_info (
+		err := gormConn.Exec(`create table migration_info (
 			id integer not null primary key
-		)`)
+		)`).Error
 		if err != nil {
 			return errors.WithStack(err)
 		}
@@ -171,7 +166,7 @@ func dbMigrate() error {
 
 func doMigration(id int, query string) error {
 	ctx := context.Background()
-	return tx(func(tx *sql.Tx) error {
+	return txGorm(func(tx *gorm.DB) error {
 		exist, err := rowExist(ctx, "migration_info", id, tx)
 		if err != nil {
 			return err
@@ -181,11 +176,11 @@ func doMigration(id int, query string) error {
 			return nil
 		}
 
-		_, err = tx.Exec(query)
+		err = tx.Exec(query).Error
 		if err != nil {
 			return errors.WithStack(err)
 		}
-		_, err = tx.Exec(`insert into migration_info(id) values(?)`, id)
+		err = tx.Exec(`insert into migration_info(id) values(?)`, id).Error
 		if err != nil {
 			return errors.WithStack(err)
 		}
@@ -193,57 +188,13 @@ func doMigration(id int, query string) error {
 	})
 }
 
-func tx(f func(*sql.Tx) error) error {
-	tx, err := Conn.Begin()
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	err = f(tx)
-	if err != nil {
-		tx.Rollback()
-		return errors.Wrap(err, "Transaction Rollbacked")
-	}
-	tx.Commit()
-	return nil
-}
-
-func init() {
-	logger := instrumentedsql.LoggerFunc(func(ctx context.Context, msg string, keyvals ...interface{}) {
-		// log.Printf("%s %v", msg, keyvals)
-	})
-	sql.Register("instrumented-sqlite", instrumentedsql.WrapDriver(&sqlite3.SQLiteDriver{}, instrumentedsql.WithLogger(logger)))
-
-	fname, err := homedir.Expand("~/.cache/korat/development.sqlite3")
-	if err != nil {
-		panic(err)
-	}
-
-	db, err := sql.Open("instrumented-sqlite", fname)
-	if err != nil {
-		panic(err)
-	}
-	Conn = db
-
-	_, err = Conn.Exec("PRAGMA foreign_keys = ON;")
-	if err != nil {
-		panic(err)
-	}
-
-	err = dbMigrate()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "%+v\n", err)
-		os.Exit(1)
-	}
-}
-
 type sqlConn interface {
 	QueryRowContext(context.Context, string, ...interface{}) *sql.Row
 	ExecContext(context.Context, string, ...interface{}) (sql.Result, error)
 }
 
-func rowExist(ctx context.Context, tbl string, id int, conn sqlConn) (bool, error) {
-	row := conn.QueryRowContext(ctx, fmt.Sprintf(`select 1 from %s where id = ?`, tbl), id)
+func rowExist(ctx context.Context, tbl string, id int, conn *gorm.DB) (bool, error) {
+	row := conn.Raw(fmt.Sprintf(`select 1 from %s where id = ?`, tbl), id).Row()
 	var blackhole int
 	err := row.Scan(&blackhole)
 

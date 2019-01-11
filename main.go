@@ -1,8 +1,18 @@
 package main
 
-import "context"
+import (
+	"context"
+	"fmt"
+	"os"
+)
 
 func main() {
+	err := dbMigrate()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%+v\n", err)
+		os.Exit(1)
+	}
+
 	ctx := context.Background()
 	go func() {
 		err := StartFetchIssues(ctx)
