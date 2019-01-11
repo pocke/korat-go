@@ -40,20 +40,13 @@ func accountsIndex(c echo.Context) error {
 	return c.JSON(http.StatusOK, accounts)
 }
 
-type AccountCreateParam struct {
-	DisplayName string `json:"displayName"`
-	UrlBase     string `json:"urlBase"`
-	ApiUrlBase  string `json:"apiUrlBase"`
-	AccessToken string `json:"accessToken"`
-}
-
 func accountsCreate(c echo.Context) error {
-	p := &AccountCreateParam{}
-	err := c.Bind(p)
+	a := Account{}
+	err := c.Bind(a)
 	if err != nil {
 		return err
 	}
-	return CreateAccount(c.Request().Context(), p)
+	return gormConn.Create(a).Error
 }
 
 type SearchIssuesQuery struct {

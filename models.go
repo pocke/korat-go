@@ -625,10 +625,3 @@ func SelectUndeterminedPullRequest(ctx context.Context, accountID int) (id int, 
 	`, accountID, t).Row().Scan(&id, &owner, &repo, &number)
 	return
 }
-
-func CreateAccount(ctx context.Context, p *AccountCreateParam) error {
-	return gormConn.Exec(`
-		insert into accounts(displayName, urlBase, apiUrlBase, accessToken)
-		VALUES { ?, ?, ?, ? }
-	`, p.DisplayName, p.UrlBase, p.ApiUrlBase, p.AccessToken).Error
-}
