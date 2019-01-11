@@ -170,6 +170,11 @@ func fetchOldIssues(ctx context.Context, client *github.Client, channelID int, q
 			return err
 		}
 
+		// Ignore too old issues
+		if oldestUpdatedAt.After(time.Now().Add(1 * 365 * 24 * time.Hour)) {
+			break
+		}
+
 		q := &fetchIssueQuery{base: queryBase, cond: "updated:<=" + fmtTime(oldestUpdatedAt)}
 		cnt, err := fetchAndSaveIssue(ctx, client, channelID, q, "desc")
 		if err != nil {
