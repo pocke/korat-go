@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
 
 	"github.com/jinzhu/gorm"
 	_ "github.com/jinzhu/gorm/dialects/sqlite"
@@ -57,9 +58,16 @@ type Channel struct {
 	ID          int
 	DisplayName string `gorm:"column:displayName"`
 	System      sql.NullString
-	QueriesRow  string `gorm:"column:queries"`
-	Queries     []string
-	AccountID   int `gorm:"column:accountID"`
+	QueriesRaw  string `gorm:"column:queries"`
+	AccountID   int    `gorm:"column:accountID"`
+
+	Account Account
+}
+
+func (c Channel) Queries() ([]string, error) {
+	res := make([]string, 0)
+	err := json.Unmarshal([]byte(c.QueriesRaw), &res)
+	return res, err
 }
 
 func init() {

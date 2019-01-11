@@ -30,57 +30,6 @@ type ChannelOld struct {
 	account *AccountOld
 }
 
-func SelectChannels(ctx context.Context) ([]ChannelOld, error) {
-	res := make([]ChannelOld, 0)
-	accounts := make(map[int]*AccountOld)
-
-	rows, err := Conn.QueryContext(ctx, `
-		select
-			c.id, c.displayName, c.system, c.queries, c.accountID
-		from
-			channels as c
-	`)
-	if err != nil {
-		return nil, err
-	}
-
-	for rows.Next() {
-		var accountID int
-		var ch ChannelOld
-		var queries string
-
-		if err := rows.Scan(&ch.id, &ch.displayName, &ch.system, &queries, &accountID); err != nil {
-			return nil, err
-		}
-		err := json.Unmarshal([]byte(queries), &ch.queries)
-		if err != nil {
-			return nil, err
-		}
-
-		if a, ok := accounts[accountID]; ok {
-			ch.account = a
-		} else {
-			a := &AccountOld{}
-			err := Conn.QueryRowContext(ctx, `
-				select
-					id, displayName, urlBase, apiUrlBase, accessToken
-				from
-					accounts
-				where
-					id = ?
-			`, accountID).Scan(&a.id, &a.displayName, &a.urlBase, &a.apiUrlBase, &a.accessToken)
-			if err != nil {
-				return nil, err
-			}
-			ch.account = a
-			accounts[accountID] = a
-		}
-		res = append(res, ch)
-	}
-
-	return res, nil
-}
-
 func SelectChannelsUnreadCount(ctx context.Context) ([]*UnreadCount, error) {
 	res := make([]*UnreadCount, 0)
 

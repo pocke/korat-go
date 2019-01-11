@@ -26,13 +26,14 @@ import (
 const GitHubURIlimit = 5000
 
 func StartFetchIssues(ctx context.Context) error {
-	chs, err := SelectChannels(ctx)
+	chs := make([]Channel, 0)
+	err := gormConn.Preload("Account").Find(&chs).Error
 	if err != nil {
 		return err
 	}
 
 	for _, c := range chs {
-		go func(c ChannelOld) {
+		go func(c Channel) {
 			for {
 				childCtx, cancel := context.WithCancel(ctx)
 				err := startFetchIssuesWithChannel(childCtx, c)
@@ -66,22 +67,25 @@ func sendErrToSlack(err error) error {
 	return err
 }
 
-func startFetchIssuesWithChannel(ctx context.Context, c ChannelOld) error {
-	client := ghClient(ctx, c.account.accessToken)
+func startFetchIssuesWithChannel(ctx context.Context, c Channel) error {
+	client := ghClient(ctx, c.Account.AccessToken)
 	var qs []string
-	if c.system.Valid == true {
-		var err error
-		qs, err = buildSystemQueries(ctx, c.system.String, client)
+	var err error
+	if c.System.Valid == true {
+		qs, err = buildSystemQueries(ctx, c.System.String, client)
 		if err != nil {
 			return err
 		}
 	} else {
-		qs = c.queries
+		qs, err = c.Queries()
+		if err != nil {
+			return err
+		}
 	}
 
 	errCh := make(chan error)
 	for _, q := range qs {
-		err := startFetchIssuesFor(ctx, client, c.id, q, errCh)
+		err := startFetchIssuesFor(ctx, client, c.ID, q, errCh)
 		if err != nil {
 			return err
 		}
