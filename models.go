@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/go-github/v21/github"
+	"github.com/jinzhu/gorm"
 )
 
 type AccountOld struct {
@@ -363,8 +364,9 @@ func includeAssigneesToIssues(ctx context.Context, issues []*IssueOld) error {
 var RepoFromIssueUrlRe = regexp.MustCompile(`/([^/]+)/([^/]+)/issues/\d+$`)
 
 func ImportIssues(ctx context.Context, issues []github.Issue, channelID int, query string) error {
-	return tx(func(tx *sql.Tx) error {
-		qid, err := findOrCreateQuery(ctx, query, tx)
+	return txGorm(func(tx *gorm.DB) error {
+		q := Query{Query: query}
+		err := tx.FirstOrCreate(&q, q).Error
 		if err != nil {
 			return err
 		}
@@ -377,11 +379,11 @@ func ImportIssues(ctx context.Context, issues []github.Issue, channelID int, que
 
 			user := i.GetUser()
 			userID := user.GetID()
-			_, err := tx.ExecContext(ctx, `
+			err := tx.Exec(`
 				replace into github_users
 				(id, login, avatarURL)
 				values (?, ?, ?)
-			`, userID, user.GetLogin(), user.GetAvatarURL())
+			`, userID, user.GetLogin(), user.GetAvatarURL()).Error
 			if err != nil {
 				return err
 			}
@@ -421,26 +423,26 @@ func ImportIssues(ctx context.Context, issues []github.Issue, channelID int, que
 			}
 
 			if exist {
-				_, err = tx.ExecContext(ctx, `
+				err = tx.Exec(`
 					update issues
 					set number = ?, title = ?, userID = ?, repoOwner = ?, repoName = ?, state = ?, locked = ?, comments = ?,
 					createdAt = ?, updatedAt = ?, closedAt = ?, isPullRequest = ?, body = ?, milestoneID = ?, alreadyRead = ?
 					where id = ?
 				`, i.GetNumber(), i.GetTitle(), userID, repoOwner, repoName, i.GetState(), i.GetLocked(), i.GetComments(),
-					createdAt, updatedAt, closedAt, i.IsPullRequest(), i.GetBody(), milestoneID, prevAlreadyRead && prevUpdatedAt.Equal(i.GetUpdatedAt()), id)
+					createdAt, updatedAt, closedAt, i.IsPullRequest(), i.GetBody(), milestoneID, prevAlreadyRead && prevUpdatedAt.Equal(i.GetUpdatedAt()), id).Error
 				if err != nil {
 					return err
 				}
 			} else {
 				// If issue is too old, it is marked as read
 				alreadyRead := i.GetUpdatedAt().Before(time.Now().Add(-24 * 30 * time.Hour))
-				_, err = tx.ExecContext(ctx, `
+				err = tx.Exec(`
 					insert into issues
 					(id, number, title, userID, repoOwner, repoName, state, locked, comments,
 					createdAt, updatedAt, closedAt, isPullRequest, body, alreadyRead, milestoneID)
 					VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 				`, id, i.GetNumber(), i.GetTitle(), userID, repoOwner, repoName, i.GetState(), i.GetLocked(), i.GetComments(),
-					createdAt, updatedAt, closedAt, i.IsPullRequest(), i.GetBody(), alreadyRead, milestoneID)
+					createdAt, updatedAt, closedAt, i.IsPullRequest(), i.GetBody(), alreadyRead, milestoneID).Error
 				if err != nil {
 					return err
 				}
@@ -453,11 +455,11 @@ func ImportIssues(ctx context.Context, issues []github.Issue, channelID int, que
 				return err
 			}
 
-			_, err = tx.ExecContext(ctx, `
+			err = tx.Exec(`
 				replace into channel_issues
 				(issueID, channelID, queryID)
 				values (?, ?, ?)
-			`, id, channelID, qid)
+			`, id, channelID, q.ID).Error
 			if err != nil {
 				return err
 			}
@@ -467,10 +469,10 @@ func ImportIssues(ctx context.Context, issues []github.Issue, channelID int, que
 	})
 }
 
-func issueUpdatedAtAndAlreadyRead(ctx context.Context, issueID int, c sqlConn) (time.Time, bool, error) {
+func issueUpdatedAtAndAlreadyRead(ctx context.Context, issueID int, c *gorm.DB) (time.Time, bool, error) {
 	var updatedAt string
 	var read bool
-	err := c.QueryRowContext(ctx, `select updatedAt, alreadyRead from issues where id = ?`, issueID).Scan(&updatedAt, &read)
+	err := c.Raw(`select updatedAt, alreadyRead from issues where id = ?`, issueID).Row().Scan(&updatedAt, &read)
 	if err != nil {
 		return time.Time{}, false, err
 	}
@@ -481,32 +483,12 @@ func issueUpdatedAtAndAlreadyRead(ctx context.Context, issueID int, c sqlConn) (
 	return u, read, nil
 }
 
-func findOrCreateQuery(ctx context.Context, query string, tx sqlConn) (int, error) {
-	var id int
-	err := tx.QueryRowContext(ctx, `select id from queries where query = ?`, query).Scan(&id)
-	if err == sql.ErrNoRows {
-		res, err := tx.ExecContext(ctx, `insert into queries (query) VALUES (?)`, query)
-		if err != nil {
-			return 0, err
-		}
-		id, err := res.LastInsertId()
-		if err != nil {
-			return 0, err
-		}
-		return (int)(id), nil
-	} else if err != nil {
-		return 0, err
-	}
-
-	return id, nil
-}
-
-func importLabels(ctx context.Context, issue github.Issue, tx *sql.Tx) error {
+func importLabels(ctx context.Context, issue github.Issue, tx *gorm.DB) error {
 	issueID := issue.GetID()
-	_, err := tx.ExecContext(ctx, `
+	err := tx.Exec(`
 			delete from assigned_labels_to_issue
 			where issueID = ?
-		`, issueID)
+		`, issueID).Error
 	if err != nil {
 		return err
 	}
@@ -514,20 +496,20 @@ func importLabels(ctx context.Context, issue github.Issue, tx *sql.Tx) error {
 	for _, label := range issue.Labels {
 		labelID := label.GetID()
 
-		_, err := tx.ExecContext(ctx, `
+		err := tx.Exec(`
 				replace into labels
 				(id, name, color, 'default')
 				VALUES (?, ?, ?, ?)
-			`, labelID, label.GetName(), label.GetColor(), label.GetDefault())
+			`, labelID, label.GetName(), label.GetColor(), label.GetDefault()).Error
 		if err != nil {
 			return err
 		}
 
-		_, err = tx.ExecContext(ctx, `
+		err = tx.Exec(`
 				insert into assigned_labels_to_issue
 				(issueID, labelID)
 				VALUES (?, ?)
-			`, issueID, labelID)
+			`, issueID, labelID).Error
 		if err != nil {
 			return err
 		}
@@ -536,7 +518,7 @@ func importLabels(ctx context.Context, issue github.Issue, tx *sql.Tx) error {
 	return nil
 }
 
-func insertMilestone(ctx context.Context, milestone *github.Milestone, tx *sql.Tx) error {
+func insertMilestone(ctx context.Context, milestone *github.Milestone, tx *gorm.DB) error {
 	mID := milestone.GetID()
 	createdAt := fmtTime(milestone.GetCreatedAt())
 	updatedAt := fmtTime(milestone.GetUpdatedAt())
@@ -548,11 +530,11 @@ func insertMilestone(ctx context.Context, milestone *github.Milestone, tx *sql.T
 		closedAt.String = fmtTime(*milestone.ClosedAt)
 	}
 
-	_, err := tx.ExecContext(ctx, `
+	err := tx.Exec(`
 			replace into milestones
 			(id, number, title, description, state, createdAt, updatedAt, closedAt)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-		`, mID, milestone.GetNumber(), milestone.GetTitle(), milestone.GetDescription(), milestone.GetState(), createdAt, updatedAt, closedAt)
+		`, mID, milestone.GetNumber(), milestone.GetTitle(), milestone.GetDescription(), milestone.GetState(), createdAt, updatedAt, closedAt).Error
 	if err != nil {
 		return err
 	}
@@ -560,12 +542,12 @@ func insertMilestone(ctx context.Context, milestone *github.Milestone, tx *sql.T
 	return nil
 }
 
-func importAssignees(ctx context.Context, issue github.Issue, tx *sql.Tx) error {
+func importAssignees(ctx context.Context, issue github.Issue, tx *gorm.DB) error {
 	issueID := issue.GetID()
-	_, err := tx.ExecContext(ctx, `
+	err := tx.Exec(`
 			delete from assigned_users_to_issue
 			where issueID = ?
-		`, issueID)
+		`, issueID).Error
 	if err != nil {
 		return err
 	}
@@ -573,20 +555,20 @@ func importAssignees(ctx context.Context, issue github.Issue, tx *sql.Tx) error 
 	for _, user := range issue.Assignees {
 		userID := user.GetID()
 
-		_, err := tx.ExecContext(ctx, `
+		err := tx.Exec(`
 				replace into github_users
 				(id, login, avatarURL)
 				VALUES (?, ?, ?)
-			`, userID, user.GetLogin(), user.GetAvatarURL())
+			`, userID, user.GetLogin(), user.GetAvatarURL()).Error
 		if err != nil {
 			return err
 		}
 
-		_, err = tx.ExecContext(ctx, `
+		err = tx.Exec(`
 				insert into assigned_users_to_issue
 				(issueID, userID)
 				VALUES (?, ?)
-			`, issueID, userID)
+			`, issueID, userID).Error
 		if err != nil {
 			return err
 		}

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/go-github/v21/github"
+	"github.com/jinzhu/gorm"
 	_ "github.com/motemen/go-loghttp/global"
 	"github.com/pkg/errors"
 
@@ -151,9 +152,10 @@ func fetchAndSaveIssue(ctx context.Context, client *github.Client, channelID int
 
 func fetchOldIssues(ctx context.Context, client *github.Client, channelID int, queryBase string) error {
 	var qid int
-	err := tx(func(tx *sql.Tx) error {
-		var err error
-		qid, err = findOrCreateQuery(ctx, queryBase, Conn)
+	err := txGorm(func(tx *gorm.DB) error {
+		q := Query{Query: queryBase}
+		err := tx.FirstOrCreate(&q, q).Error
+		qid = q.ID
 		return err
 	})
 	if err != nil {
@@ -183,9 +185,10 @@ func fetchOldIssues(ctx context.Context, client *github.Client, channelID int, q
 
 func fetchNewIssues(ctx context.Context, client *github.Client, channelID int, queryBase string) error {
 	var qid int
-	err := tx(func(tx *sql.Tx) error {
-		var err error
-		qid, err = findOrCreateQuery(ctx, queryBase, Conn)
+	err := txGorm(func(tx *gorm.DB) error {
+		q := Query{Query: queryBase}
+		err := tx.FirstOrCreate(&q, q).Error
+		qid = q.ID
 		return err
 	})
 	if err != nil {

@@ -8,6 +8,7 @@ import (
 	"github.com/jinzhu/gorm"
 	_ "github.com/jinzhu/gorm/dialects/sqlite"
 	homedir "github.com/mitchellh/go-homedir"
+	"github.com/pkg/errors"
 )
 
 type Issue struct {
@@ -33,20 +34,20 @@ type Issue struct {
 }
 
 type Label struct {
-	ID      int
+	ID      int `gorm:"primary_key"`
 	Name    string
 	Color   string
 	Default bool
 }
 
 type User struct {
-	ID        int
+	ID        int `gorm:"primary_key"`
 	Login     string
 	AvatarURL string
 }
 
 type Account struct {
-	ID          int
+	ID          int    `gorm:"primary_key"`
 	DisplayName string `gorm:"column:displayName"`
 	UrlBase     string `gorm:"column:urlBase"`
 	ApiUrlBase  string `gorm:"column:apiUrlBase"`
@@ -56,13 +57,18 @@ type Account struct {
 }
 
 type Channel struct {
-	ID          int
+	ID          int    `gorm:"primary_key"`
 	DisplayName string `gorm:"column:displayName"`
 	System      sql.NullString
 	QueriesRaw  string `gorm:"column:queries"`
 	AccountID   int    `gorm:"column:accountID"`
 
 	Account Account
+}
+
+type Query struct {
+	ID    int `gorm:"primary_key"`
+	Query string
 }
 
 func (c Channel) Queries() ([]string, error) {
@@ -83,6 +89,21 @@ func EdgeIssueTime(queryID int, order string) (time.Time, error) {
 	return parseTime(i.UpdatedAt)
 }
 
+func txGorm(f func(*gorm.DB) error) error {
+	tx := gormConn.Begin()
+	if tx.Error != nil {
+		return errors.WithStack(tx.Error)
+	}
+
+	err := f(tx)
+	if err != nil {
+		tx.Rollback()
+		return errors.WithStack(err)
+	}
+
+	return tx.Commit().Error
+}
+
 func init() {
 	fname, err := homedir.Expand("~/.cache/korat/development.sqlite3")
 	if err != nil {
@@ -97,7 +118,11 @@ func init() {
 	db.Callback().Create().Remove("gorm:update_time_stamp")
 	// Will not update UpdatedAt on .Save() call
 	db.Callback().Update().Remove("gorm:update_time_stamp")
-	db.LogMode(true)
+	// db.LogMode(true)
+	err = db.Exec("PRAGMA foreign_keys = ON;").Error
+	if err != nil {
+		panic(err)
+	}
 
 	gormConn = db
 }
