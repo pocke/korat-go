@@ -79,7 +79,7 @@ func (c Channel) Queries() ([]string, error) {
 
 func EdgeIssueTime(queryID int, order string) (time.Time, error) {
 	i := &Issue{}
-	err := gormConn.Joins("JOIN channel_issues as ci").
+	err := gormConn.Joins("JOIN channel_issues as ci ON issues.id = ci.issueID").
 		Where("ci.queryID = ?", queryID).
 		Order("issues.updatedAt " + order).Limit(1).First(i).Error
 	if err != nil {
