@@ -8,13 +8,14 @@ import (
 )
 
 func StartDetermineMerged(ctx context.Context) error {
-	as, err := SelectAccountsOld(ctx)
+	accounts := make([]Account, 0)
+	err := gormConn.Find(&accounts).Error
 	if err != nil {
 		return err
 	}
 
-	for _, a := range as {
-		go func(a *AccountForGitHubAPI) {
+	for _, a := range accounts {
+		go func(a Account) {
 			for {
 				childCtx, cancel := context.WithCancel(ctx)
 				err := startDetermineMerged(childCtx, a)
@@ -30,12 +31,12 @@ func StartDetermineMerged(ctx context.Context) error {
 	return nil
 }
 
-func startDetermineMerged(ctx context.Context, account *AccountForGitHubAPI) error {
-	client := ghClient(ctx, account.accessToken)
+func startDetermineMerged(ctx context.Context, account Account) error {
+	client := ghClient(ctx, account.AccessToken)
 
 	for {
 		time.Sleep(3 * time.Second)
-		id, owner, name, number, err := SelectUndeterminedPullRequest(ctx, account.id)
+		id, owner, name, number, err := SelectUndeterminedPullRequest(ctx, account.ID)
 		if err == sql.ErrNoRows {
 			continue
 		} else if err != nil {

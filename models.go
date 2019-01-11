@@ -698,25 +698,6 @@ type AccountForGitHubAPI struct {
 	id          int
 }
 
-func SelectAccountsOld(ctx context.Context) ([]*AccountForGitHubAPI, error) {
-	rows, err := Conn.QueryContext(ctx, `select id, accessToken from accounts`)
-	if err != nil {
-		return nil, err
-	}
-
-	res := make([]*AccountForGitHubAPI, 0)
-
-	for rows.Next() {
-		a := &AccountForGitHubAPI{}
-		err := rows.Scan(&a.id, &a.accessToken)
-		if err != nil {
-			return nil, err
-		}
-		res = append(res, a)
-	}
-	return res, nil
-}
-
 func SelectUndeterminedPullRequest(ctx context.Context, accountID int) (id int, owner string, repo string, number int, err error) {
 	t := fmtTime(time.Now().Add(-3 * 24 * time.Hour))
 	err = Conn.QueryRowContext(ctx, `
