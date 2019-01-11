@@ -48,6 +48,9 @@ func startDetermineMerged(ctx context.Context, account Account) error {
 		}
 		merged := pr.GetMerged()
 
-		DetermineMerged(ctx, id, merged)
+		err = gormConn.Model(&Issue{ID: id}).Update("merged", merged).Error
+		if err != nil {
+			return err
+		}
 	}
 }

@@ -626,14 +626,6 @@ func SelectUndeterminedPullRequest(ctx context.Context, accountID int) (id int, 
 	return
 }
 
-func DetermineMerged(ctx context.Context, issueID int, merged bool) error {
-	return gormConn.Exec(`
-		update issues
-		set merged = ?
-		where id = ?
-	`, merged, issueID).Error
-}
-
 func CreateAccount(ctx context.Context, p *AccountCreateParam) error {
 	return gormConn.Exec(`
 		insert into accounts(displayName, urlBase, apiUrlBase, accessToken)
