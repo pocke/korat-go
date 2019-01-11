@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"time"
 
 	"github.com/jinzhu/gorm"
 	_ "github.com/jinzhu/gorm/dialects/sqlite"
@@ -68,6 +69,18 @@ func (c Channel) Queries() ([]string, error) {
 	res := make([]string, 0)
 	err := json.Unmarshal([]byte(c.QueriesRaw), &res)
 	return res, err
+}
+
+func EdgeIssueTime(queryID int, order string) (time.Time, error) {
+	i := &Issue{}
+	err := gormConn.Joins("JOIN channel_issues as ci").
+		Where("ci.queryID = ?", queryID).
+		Order("issues.updatedAt " + order).Limit(1).First(i).Error
+	if err != nil {
+		return time.Time{}, err
+	}
+
+	return parseTime(i.UpdatedAt)
 }
 
 func init() {

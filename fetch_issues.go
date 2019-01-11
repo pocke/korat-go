@@ -161,7 +161,7 @@ func fetchOldIssues(ctx context.Context, client *github.Client, channelID int, q
 	}
 
 	for {
-		oldestUpdatedAt, err := OldestIssueTime(ctx, qid)
+		oldestUpdatedAt, err := OldestIssueTime(qid)
 		if err == sql.ErrNoRows {
 			oldestUpdatedAt = time.Now().UTC()
 		} else if err != nil {
@@ -193,7 +193,7 @@ func fetchNewIssues(ctx context.Context, client *github.Client, channelID int, q
 	}
 
 	for {
-		newestUpdatedAt, err := NewestIssueTime(ctx, qid)
+		newestUpdatedAt, err := NewestIssueTime(qid)
 		if err == sql.ErrNoRows {
 			newestUpdatedAt = time.Now()
 		} else if err != nil {

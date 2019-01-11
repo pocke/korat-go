@@ -33,7 +33,7 @@ type ChannelOld struct {
 func SelectChannelsUnreadCount(ctx context.Context) ([]*UnreadCount, error) {
 	res := make([]*UnreadCount, 0)
 
-	rows, err := Conn.QueryContext(ctx, `
+	rows, err := gormConn.Raw(`
 		select
 			X.channelID, count(X.issueID)
 		from
@@ -49,7 +49,7 @@ func SelectChannelsUnreadCount(ctx context.Context) ([]*UnreadCount, error) {
 			) as X
 		group by
 			X.channelID
-	`)
+	`).Rows()
 	if err != nil {
 		return nil, err
 	}
@@ -72,14 +72,14 @@ func UnreadCountForIssue(ctx context.Context, issueIDs []int) ([]*UnreadCount, e
 		issueIDsStr[idx] = strconv.Itoa(issueID)
 	}
 
-	rows, err := Conn.QueryContext(ctx, fmt.Sprintf(`
+	rows, err := gormConn.Raw(fmt.Sprintf(`
 		select distinct
 			channelID
 		from
 			channel_issues
 		where
 			issueID IN (%s)
-	`, strings.Join(issueIDsStr, ",")))
+	`, strings.Join(issueIDsStr, ","))).Rows()
 	if err != nil {
 		return nil, err
 	}
@@ -100,7 +100,7 @@ func UnreadCountForIssue(ctx context.Context, issueIDs []int) ([]*UnreadCount, e
 		channelMap[c.ChannelID] = c
 	}
 
-	rows, err = Conn.QueryContext(ctx, fmt.Sprintf(`
+	rows, err = gormConn.Raw(fmt.Sprintf(`
 		select
 			X.channelID, count(X.issueID)
 		from
@@ -117,7 +117,7 @@ func UnreadCountForIssue(ctx context.Context, issueIDs []int) ([]*UnreadCount, e
 			) as X
 		group by
 			X.channelID
-	`, strings.Join(channelIDs, ",")))
+	`, strings.Join(channelIDs, ","))).Rows()
 	if err != nil {
 		return nil, err
 	}
@@ -198,7 +198,7 @@ func SelectIssues(ctx context.Context, q *SearchIssuesQuery) ([]*IssueOld, error
 	res := make([]*IssueOld, 0)
 	additionalConds := buildFilterForSelectIssues(q.filter)
 
-	rows, err := Conn.QueryContext(ctx, fmt.Sprintf(`
+	rows, err := gormConn.Raw(fmt.Sprintf(`
 		select distinct
 			i.id, i.number, i.title, i.repoOwner, i.repoName, i.state, i.locked, i.comments, i.createdAt, i.updatedAt, i.closedAt, i.isPullREquest, i.body, i.alreadyRead, i.merged,
 			u.id, u.login, u.avatarURL
@@ -218,7 +218,7 @@ func SelectIssues(ctx context.Context, q *SearchIssuesQuery) ([]*IssueOld, error
 		offset
 			?
 		;
-	`, additionalConds), q.channelID, q.perPage, (q.page-1)*q.perPage)
+	`, additionalConds), q.channelID, q.perPage, (q.page-1)*q.perPage).Rows()
 	if err != nil {
 		return nil, err
 	}
@@ -294,7 +294,7 @@ func includeLabelsToIssues(ctx context.Context, issues []*IssueOld) error {
 		issueMap[i.ID] = i
 	}
 
-	rows, err := Conn.QueryContext(ctx, fmt.Sprintf(`
+	rows, err := gormConn.Raw(fmt.Sprintf(`
 		select
 			l.id, l.name, l.color, l.'default', li.issueID
 		from
@@ -304,7 +304,7 @@ func includeLabelsToIssues(ctx context.Context, issues []*IssueOld) error {
 			l.id = li.labelID AND
 			li.issueID IN (%s)
 		;
-	`, strings.Join(issueIDs, ", ")))
+	`, strings.Join(issueIDs, ", "))).Rows()
 	if err != nil {
 		return err
 	}
@@ -331,7 +331,7 @@ func includeAssigneesToIssues(ctx context.Context, issues []*IssueOld) error {
 		issueMap[i.ID] = i
 	}
 
-	rows, err := Conn.QueryContext(ctx, fmt.Sprintf(`
+	rows, err := gormConn.Raw(fmt.Sprintf(`
 		select
 			u.id, u.login, u.avatarURL, ui.issueID
 		from
@@ -341,7 +341,7 @@ func includeAssigneesToIssues(ctx context.Context, issues []*IssueOld) error {
 			u.id = ui.userID AND
 			ui.issueID IN (%s)
 		;
-	`, strings.Join(issueIDs, ", ")))
+	`, strings.Join(issueIDs, ", "))).Rows()
 	if err != nil {
 		return err
 	}
@@ -603,43 +603,20 @@ func parseTime(s string) (time.Time, error) {
 	return time.Parse(time.RFC3339, s)
 }
 
-func OldestIssueTime(ctx context.Context, queryID int) (time.Time, error) {
-	return findEdgeIssueTime(ctx, queryID, "asc")
+func OldestIssueTime(queryID int) (time.Time, error) {
+	return EdgeIssueTime(queryID, "asc")
 }
 
-func NewestIssueTime(ctx context.Context, queryID int) (time.Time, error) {
-	return findEdgeIssueTime(ctx, queryID, "desc")
-}
-
-func findEdgeIssueTime(ctx context.Context, queryID int, ascDesc string) (time.Time, error) {
-	var t string
-	err := Conn.QueryRowContext(ctx, fmt.Sprintf(`
-		select
-			i.updatedAt
-		from
-			issues as i,
-			channel_issues as ci
-		where
-			i.id = ci.issueID AND
-			ci.queryID = ?
-		order by i.updatedAt %s
-		limit 1
-		;
-`, ascDesc), queryID).Scan(&t)
-	if err != nil {
-		return time.Time{}, err
-	}
-
-	return parseTime(t)
+func NewestIssueTime(queryID int) (time.Time, error) {
+	return EdgeIssueTime(queryID, "desc")
 }
 
 func UpdateIssueAlreadyRead(ctx context.Context, issueID int, alreadyRead bool) error {
-	_, err := Conn.ExecContext(ctx, `
+	return gormConn.Exec(`
 		update issues
 		set alreadyRead = ?
 		where id = ?
-	`, alreadyRead, issueID)
-	return err
+	`, alreadyRead, issueID).Error
 }
 
 type AccountForGitHubAPI struct {
@@ -649,7 +626,7 @@ type AccountForGitHubAPI struct {
 
 func SelectUndeterminedPullRequest(ctx context.Context, accountID int) (id int, owner string, repo string, number int, err error) {
 	t := fmtTime(time.Now().Add(-3 * 24 * time.Hour))
-	err = Conn.QueryRowContext(ctx, `
+	err = gormConn.Raw(`
 		select i.id, i.repoOwner, i.repoName, i.number
 		from
 			issues as i,
@@ -663,23 +640,21 @@ func SelectUndeterminedPullRequest(ctx context.Context, accountID int) (id int, 
 			i.merged is null AND
 			i.closedAt is not null AND
 			i.updatedAt > ?
-	`, accountID, t).Scan(&id, &owner, &repo, &number)
+	`, accountID, t).Row().Scan(&id, &owner, &repo, &number)
 	return
 }
 
 func DetermineMerged(ctx context.Context, issueID int, merged bool) error {
-	_, err := Conn.ExecContext(ctx, `
+	return gormConn.Exec(`
 		update issues
 		set merged = ?
 		where id = ?
-	`, merged, issueID)
-	return err
+	`, merged, issueID).Error
 }
 
 func CreateAccount(ctx context.Context, p *AccountCreateParam) error {
-	_, err := Conn.ExecContext(ctx, `
+	return gormConn.Exec(`
 		insert into accounts(displayName, urlBase, apiUrlBase, accessToken)
 		VALUES { ?, ?, ?, ? }
-	`, p.DisplayName, p.UrlBase, p.ApiUrlBase, p.AccessToken)
-	return err
+	`, p.DisplayName, p.UrlBase, p.ApiUrlBase, p.AccessToken).Error
 }
