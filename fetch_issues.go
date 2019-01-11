@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -163,10 +162,16 @@ func fetchOldIssues(ctx context.Context, client *github.Client, channelID int, q
 	}
 
 	for {
-		oldestUpdatedAt, err := OldestIssueTime(qid)
-		if err == sql.ErrNoRows {
+		var oldestUpdatedAt time.Time
+		i := Issue{}
+		res := EdgeIssueTime(qid, "asc").First(&i)
+		if res.RecordNotFound() {
 			oldestUpdatedAt = time.Now().UTC()
-		} else if err != nil {
+		} else if res.Error != nil {
+			return res.Error
+		}
+		oldestUpdatedAt, err = parseTime(i.UpdatedAt)
+		if err != nil {
 			return err
 		}
 
@@ -201,10 +206,16 @@ func fetchNewIssues(ctx context.Context, client *github.Client, channelID int, q
 	}
 
 	for {
-		newestUpdatedAt, err := NewestIssueTime(qid)
-		if err == sql.ErrNoRows {
-			newestUpdatedAt = time.Now()
-		} else if err != nil {
+		var newestUpdatedAt time.Time
+		i := Issue{}
+		res := EdgeIssueTime(qid, "desc").First(&i)
+		if res.RecordNotFound() {
+			newestUpdatedAt = time.Now().UTC()
+		} else if res.Error != nil {
+			return res.Error
+		}
+		newestUpdatedAt, err = parseTime(i.UpdatedAt)
+		if err != nil {
 			return err
 		}
 

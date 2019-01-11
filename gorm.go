@@ -3,7 +3,6 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
-	"time"
 
 	"github.com/jinzhu/gorm"
 	_ "github.com/jinzhu/gorm/dialects/sqlite"
@@ -77,16 +76,10 @@ func (c Channel) Queries() ([]string, error) {
 	return res, err
 }
 
-func EdgeIssueTime(queryID int, order string) (time.Time, error) {
-	i := &Issue{}
-	err := gormConn.Joins("JOIN channel_issues as ci ON issues.id = ci.issueID").
+func EdgeIssueTime(queryID int, order string) *gorm.DB {
+	return gormConn.Joins("JOIN channel_issues as ci ON issues.id = ci.issueID").
 		Where("ci.queryID = ?", queryID).
-		Order("issues.updatedAt " + order).Limit(1).First(i).Error
-	if err != nil {
-		return time.Time{}, err
-	}
-
-	return parseTime(i.UpdatedAt)
+		Order("issues.updatedAt " + order).Limit(1)
 }
 
 func txGorm(f func(*gorm.DB) error) error {

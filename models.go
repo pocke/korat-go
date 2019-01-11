@@ -585,14 +585,6 @@ func parseTime(s string) (time.Time, error) {
 	return time.Parse(time.RFC3339, s)
 }
 
-func OldestIssueTime(queryID int) (time.Time, error) {
-	return EdgeIssueTime(queryID, "asc")
-}
-
-func NewestIssueTime(queryID int) (time.Time, error) {
-	return EdgeIssueTime(queryID, "desc")
-}
-
 func UpdateIssueAlreadyRead(ctx context.Context, issueID int, alreadyRead bool) error {
 	return gormConn.Exec(`
 		update issues
