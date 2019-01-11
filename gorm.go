@@ -70,6 +70,14 @@ type Query struct {
 	Query string
 }
 
+type MigrationInfo struct {
+	ID int
+}
+
+func (m MigrationInfo) TableName() string {
+	return "migration_info"
+}
+
 func (c Channel) Queries() ([]string, error) {
 	res := make([]string, 0)
 	err := json.Unmarshal([]byte(c.QueriesRaw), &res)

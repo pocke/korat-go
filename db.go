@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"database/sql"
-	"fmt"
 
 	"github.com/jinzhu/gorm"
 	"github.com/pkg/errors"
@@ -165,18 +164,18 @@ func dbMigrate() error {
 }
 
 func doMigration(id int, query string) error {
-	ctx := context.Background()
 	return txGorm(func(tx *gorm.DB) error {
-		exist, err := rowExist(ctx, "migration_info", id, tx)
-		if err != nil {
-			return err
+		res := gormConn.First(&MigrationInfo{ID: id})
+		exist := res.RecordNotFound()
+		if exist && res.Error != nil {
+			return res.Error
 		}
 
 		if exist {
 			return nil
 		}
 
-		err = tx.Exec(query).Error
+		err := tx.Exec(query).Error
 		if err != nil {
 			return errors.WithStack(err)
 		}
@@ -191,17 +190,4 @@ func doMigration(id int, query string) error {
 type sqlConn interface {
 	QueryRowContext(context.Context, string, ...interface{}) *sql.Row
 	ExecContext(context.Context, string, ...interface{}) (sql.Result, error)
-}
-
-func rowExist(ctx context.Context, tbl string, id int, conn *gorm.DB) (bool, error) {
-	row := conn.Raw(fmt.Sprintf(`select 1 from %s where id = ?`, tbl), id).Row()
-	var blackhole int
-	err := row.Scan(&blackhole)
-
-	if err == sql.ErrNoRows {
-		return false, nil
-	} else if err != nil {
-		return false, errors.WithStack(err)
-	}
-	return true, nil
 }
