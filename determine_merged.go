@@ -8,7 +8,7 @@ import (
 )
 
 func StartDetermineMerged(ctx context.Context) error {
-	as, err := SelectAccounts(ctx)
+	as, err := SelectAccountsOld(ctx)
 	if err != nil {
 		return err
 	}

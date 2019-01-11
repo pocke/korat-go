@@ -1,7 +1,6 @@
 package main
 
 import (
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -32,23 +31,8 @@ func StartHTTPServer(port int) {
 	e.Logger.Fatal(e.Start(fmt.Sprintf(":%d", port)))
 }
 
-type ResponseAccount struct {
-	ID          int
-	DisplayName string
-	UrlBase     string
-	ApiUrlBase  string
-	Channels    []*ResponseChannel
-}
-
-type ResponseChannel struct {
-	ID          int
-	DisplayName string
-	System      sql.NullString
-	Queries     []string
-}
-
 func accountsIndex(c echo.Context) error {
-	accounts, err := SelectAccountForAPI(c.Request().Context())
+	accounts, err := SelectAccounts()
 	if err != nil {
 		return err
 	}

@@ -32,7 +32,7 @@ func StartFetchIssues(ctx context.Context) error {
 	}
 
 	for _, c := range chs {
-		go func(c Channel) {
+		go func(c ChannelOld) {
 			for {
 				childCtx, cancel := context.WithCancel(ctx)
 				err := startFetchIssuesWithChannel(childCtx, c)
@@ -66,7 +66,7 @@ func sendErrToSlack(err error) error {
 	return err
 }
 
-func startFetchIssuesWithChannel(ctx context.Context, c Channel) error {
+func startFetchIssuesWithChannel(ctx context.Context, c ChannelOld) error {
 	client := ghClient(ctx, c.account.accessToken)
 	var qs []string
 	if c.system.Valid == true {

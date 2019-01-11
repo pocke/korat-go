@@ -13,7 +13,7 @@ import (
 	"github.com/google/go-github/v21/github"
 )
 
-type Account struct {
+type AccountOld struct {
 	id          int
 	displayName string
 	urlBase     string
@@ -21,18 +21,18 @@ type Account struct {
 	accessToken string
 }
 
-type Channel struct {
+type ChannelOld struct {
 	id          int
 	displayName string
 	system      sql.NullString
 	queries     []string
 
-	account *Account
+	account *AccountOld
 }
 
-func SelectChannels(ctx context.Context) ([]Channel, error) {
-	res := make([]Channel, 0)
-	accounts := make(map[int]*Account)
+func SelectChannels(ctx context.Context) ([]ChannelOld, error) {
+	res := make([]ChannelOld, 0)
+	accounts := make(map[int]*AccountOld)
 
 	rows, err := Conn.QueryContext(ctx, `
 		select
@@ -46,7 +46,7 @@ func SelectChannels(ctx context.Context) ([]Channel, error) {
 
 	for rows.Next() {
 		var accountID int
-		var ch Channel
+		var ch ChannelOld
 		var queries string
 
 		if err := rows.Scan(&ch.id, &ch.displayName, &ch.system, &queries, &accountID); err != nil {
@@ -60,7 +60,7 @@ func SelectChannels(ctx context.Context) ([]Channel, error) {
 		if a, ok := accounts[accountID]; ok {
 			ch.account = a
 		} else {
-			a := &Account{}
+			a := &AccountOld{}
 			err := Conn.QueryRowContext(ctx, `
 				select
 					id, displayName, urlBase, apiUrlBase, accessToken
@@ -112,62 +112,6 @@ func SelectChannelsUnreadCount(ctx context.Context) ([]*UnreadCount, error) {
 			return nil, err
 		}
 		res = append(res, c)
-	}
-
-	return res, nil
-}
-
-func SelectAccountForAPI(ctx context.Context) ([]*ResponseAccount, error) {
-	res := make([]*ResponseAccount, 0)
-	rows, err := Conn.QueryContext(ctx, `
-		select
-			id, displayName, urlBase, apiUrlBase
-		from
-			accounts
-		;
-	`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		a := &ResponseAccount{}
-		err := rows.Scan(&a.ID, &a.DisplayName, &a.UrlBase, &a.ApiUrlBase)
-		if err != nil {
-			return nil, err
-		}
-		channelRows, err := Conn.QueryContext(ctx, `
-			select
-					ID, DisplayName, System, Queries
-			from
-					channels
-			where
-					accountID = ?
-			;
-		`, a.ID)
-		if err != nil {
-			return nil, err
-		}
-		for channelRows.Next() {
-			c := &ResponseChannel{}
-			var queries string
-			err := channelRows.Scan(&c.ID, &c.DisplayName, &c.System, &queries)
-			if err != nil {
-				channelRows.Close()
-				return nil, err
-			}
-			err = json.Unmarshal([]byte(queries), &c.Queries)
-			if err != nil {
-				channelRows.Close()
-				return nil, err
-			}
-
-			a.Channels = append(a.Channels, c)
-		}
-		channelRows.Close()
-
-		res = append(res, a)
 	}
 
 	return res, nil
@@ -266,7 +210,7 @@ func (n NullBoolJSON) MarshalJSON() ([]byte, error) {
 	return []byte("null"), nil
 }
 
-type Issue struct {
+type IssueOld struct {
 	ID            int
 	Number        int
 	Title         string
@@ -283,26 +227,26 @@ type Issue struct {
 	AlreadyRead   bool
 	Merged        NullBoolJSON
 
-	User      *User
-	Labels    []*Label
-	Assignees []*User
+	UserOld   *UserOld
+	Labels    []*LabelOld
+	Assignees []*UserOld
 }
 
-type Label struct {
+type LabelOld struct {
 	ID      int
 	Name    string
 	Color   string
 	Default bool
 }
 
-type User struct {
+type UserOld struct {
 	ID        int
 	Login     string
 	AvatarURL string
 }
 
-func SelectIssues(ctx context.Context, q *SearchIssuesQuery) ([]*Issue, error) {
-	res := make([]*Issue, 0)
+func SelectIssues(ctx context.Context, q *SearchIssuesQuery) ([]*IssueOld, error) {
+	res := make([]*IssueOld, 0)
 	additionalConds := buildFilterForSelectIssues(q.filter)
 
 	rows, err := Conn.QueryContext(ctx, fmt.Sprintf(`
@@ -332,11 +276,11 @@ func SelectIssues(ctx context.Context, q *SearchIssuesQuery) ([]*Issue, error) {
 	defer rows.Close()
 
 	for rows.Next() {
-		u := &User{}
-		i := &Issue{
-			Labels:    []*Label{},
-			Assignees: []*User{},
-			User:      u,
+		u := &UserOld{}
+		i := &IssueOld{
+			Labels:    []*LabelOld{},
+			Assignees: []*UserOld{},
+			UserOld:   u,
 		}
 		err := rows.Scan(&i.ID, &i.Number, &i.Title, &i.RepoOwner, &i.RepoName, &i.State, &i.Locked, &i.Comments, &i.CreatedAt, &i.UpdatedAt, &i.ClosedAt, &i.IsPullRequest, &i.Body, &i.AlreadyRead, &i.Merged,
 			&u.ID, &u.Login, &u.AvatarURL)
@@ -393,9 +337,9 @@ func buildFilterForSelectIssues(f *SearchIssueFilter) string {
 	return res
 }
 
-func includeLabelsToIssues(ctx context.Context, issues []*Issue) error {
+func includeLabelsToIssues(ctx context.Context, issues []*IssueOld) error {
 	issueIDs := make([]string, len(issues))
-	issueMap := make(map[int]*Issue, len(issues))
+	issueMap := make(map[int]*IssueOld, len(issues))
 	for idx, i := range issues {
 		issueIDs[idx] = strconv.Itoa(i.ID)
 		issueMap[i.ID] = i
@@ -418,7 +362,7 @@ func includeLabelsToIssues(ctx context.Context, issues []*Issue) error {
 	defer rows.Close()
 
 	for rows.Next() {
-		label := &Label{}
+		label := &LabelOld{}
 		var issueID int
 
 		if err := rows.Scan(&label.ID, &label.Name, &label.Color, &label.Default, &issueID); err != nil {
@@ -430,9 +374,9 @@ func includeLabelsToIssues(ctx context.Context, issues []*Issue) error {
 	return nil
 }
 
-func includeAssigneesToIssues(ctx context.Context, issues []*Issue) error {
+func includeAssigneesToIssues(ctx context.Context, issues []*IssueOld) error {
 	issueIDs := make([]string, len(issues))
-	issueMap := make(map[int]*Issue, len(issues))
+	issueMap := make(map[int]*IssueOld, len(issues))
 	for idx, i := range issues {
 		issueIDs[idx] = strconv.Itoa(i.ID)
 		issueMap[i.ID] = i
@@ -455,7 +399,7 @@ func includeAssigneesToIssues(ctx context.Context, issues []*Issue) error {
 	defer rows.Close()
 
 	for rows.Next() {
-		user := &User{}
+		user := &UserOld{}
 		var issueID int
 
 		if err := rows.Scan(&user.ID, &user.Login, &user.AvatarURL, &issueID); err != nil {
@@ -754,8 +698,7 @@ type AccountForGitHubAPI struct {
 	id          int
 }
 
-func SelectAccounts(ctx context.Context) ([]*AccountForGitHubAPI, error) {
-
+func SelectAccountsOld(ctx context.Context) ([]*AccountForGitHubAPI, error) {
 	rows, err := Conn.QueryContext(ctx, `select id, accessToken from accounts`)
 	if err != nil {
 		return nil, err

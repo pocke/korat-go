@@ -5,6 +5,8 @@ require (
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible // indirect
 	github.com/google/go-github/v21 v21.0.0
 	github.com/gorilla/websocket v1.4.0
+	github.com/jinzhu/gorm v1.9.2
+	github.com/jinzhu/inflection v0.0.0-20180308033659-04140366298a // indirect
 	github.com/labstack/echo v3.3.5+incompatible
 	github.com/labstack/gommon v0.2.8 // indirect
 	github.com/luna-duclos/instrumentedsql v0.0.0-20181127104832-b7d587d28109
