@@ -9,21 +9,20 @@ import (
 )
 
 func dbMigrate() error {
-	row := gormConn.Raw(`select name from sqlite_master where type='table' and name='migration_info'`).Row()
 	var blackhole string
-	err := row.Scan(&blackhole)
-	if err == sql.ErrNoRows {
+	res := gormConn.Raw(`select name from sqlite_master where type='table' and name='migration_info'`).First(blackhole)
+	if res.RecordNotFound() {
 		err := gormConn.Exec(`create table migration_info (
 			id integer not null primary key
 		)`).Error
 		if err != nil {
 			return errors.WithStack(err)
 		}
-	} else if err != nil {
-		return errors.WithStack(err)
+	} else if res.Error != nil {
+		return errors.WithStack(res.Error)
 	}
 
-	err = doMigration(1, `
+	err := doMigration(1, `
 		create table accounts (
 			id          integer not null primary key,
 			displayName string not null,
