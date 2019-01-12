@@ -15,7 +15,7 @@ type Issue struct {
 	Number        int
 	Title         string
 	RepoOwner     string `gorm:"column:repoOwner"`
-	RepoName      string `gorm:column:repoName`
+	RepoName      string `gorm:"column:repoName"`
 	State         string
 	Locked        bool
 	Comments      int

@@ -9,8 +9,8 @@ import (
 )
 
 func dbMigrate() error {
-	var blackhole string
-	res := gormConn.Raw(`select name from sqlite_master where type='table' and name='migration_info'`).First(blackhole)
+	var blackhole struct{ Name string }
+	res := gormConn.Raw(`select name from sqlite_master where type='table' and name='migration_info'`).First(&blackhole)
 	if res.RecordNotFound() {
 		err := gormConn.Exec(`create table migration_info (
 			id integer not null primary key

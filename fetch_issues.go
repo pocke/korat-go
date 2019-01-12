@@ -169,10 +169,11 @@ func fetchOldIssues(ctx context.Context, client *github.Client, channelID int, q
 			oldestUpdatedAt = time.Now().UTC()
 		} else if res.Error != nil {
 			return res.Error
-		}
-		oldestUpdatedAt, err = parseTime(i.UpdatedAt)
-		if err != nil {
-			return err
+		} else {
+			oldestUpdatedAt, err = parseTime(i.UpdatedAt)
+			if err != nil {
+				return err
+			}
 		}
 
 		// Ignore too old issues
@@ -213,10 +214,11 @@ func fetchNewIssues(ctx context.Context, client *github.Client, channelID int, q
 			newestUpdatedAt = time.Now().UTC()
 		} else if res.Error != nil {
 			return res.Error
-		}
-		newestUpdatedAt, err = parseTime(i.UpdatedAt)
-		if err != nil {
-			return err
+		} else {
+			newestUpdatedAt, err = parseTime(i.UpdatedAt)
+			if err != nil {
+				return err
+			}
 		}
 
 		q := &fetchIssueQuery{base: queryBase, cond: "updated:>=" + fmtTime(newestUpdatedAt)}

@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/go-github/v21/github"
 	"github.com/jinzhu/gorm"
+	"github.com/pkg/errors"
 )
 
 type AccountOld struct {
@@ -368,7 +369,7 @@ func ImportIssues(ctx context.Context, issues []github.Issue, channelID int, que
 		q := Query{Query: query}
 		err := tx.FirstOrCreate(&q, q).Error
 		if err != nil {
-			return err
+			return errors.WithStack(err)
 		}
 
 		for _, i := range issues {
@@ -385,24 +386,24 @@ func ImportIssues(ctx context.Context, issues []github.Issue, channelID int, que
 				values (?, ?, ?)
 			`, userID, user.GetLogin(), user.GetAvatarURL()).Error
 			if err != nil {
-				return err
+				return errors.WithStack(err)
 			}
 
 			id := i.GetID()
 			issueTmp := Issue{ID: (int)(id)}
 			res := tx.First(&issueTmp)
-			exist := res.RecordNotFound()
+			exist := !res.RecordNotFound()
 			var prevUpdatedAt time.Time
 			var prevAlreadyRead bool
 			if !exist {
 				// do nothing
 			} else if res.Error != nil {
-				return res.Error
+				return errors.WithStack(res.Error)
 			} else {
 				prevAlreadyRead = issueTmp.AlreadyRead
 				prevUpdatedAt, err = parseTime(issueTmp.UpdatedAt)
 				if err != nil {
-					return err
+					return errors.WithStack(err)
 				}
 			}
 
@@ -425,7 +426,7 @@ func ImportIssues(ctx context.Context, issues []github.Issue, channelID int, que
 				milestoneID.Int64 = milestone.GetID()
 
 				if err := insertMilestone(ctx, milestone, tx); err != nil {
-					return err
+					return errors.WithStack(err)
 				}
 			}
 
@@ -438,7 +439,7 @@ func ImportIssues(ctx context.Context, issues []github.Issue, channelID int, que
 				`, i.GetNumber(), i.GetTitle(), userID, repoOwner, repoName, i.GetState(), i.GetLocked(), i.GetComments(),
 					createdAt, updatedAt, closedAt, i.IsPullRequest(), i.GetBody(), milestoneID, prevAlreadyRead && prevUpdatedAt.Equal(i.GetUpdatedAt()), id).Error
 				if err != nil {
-					return err
+					return errors.WithStack(err)
 				}
 			} else {
 				// If issue is too old, it is marked as read
@@ -451,15 +452,15 @@ func ImportIssues(ctx context.Context, issues []github.Issue, channelID int, que
 				`, id, i.GetNumber(), i.GetTitle(), userID, repoOwner, repoName, i.GetState(), i.GetLocked(), i.GetComments(),
 					createdAt, updatedAt, closedAt, i.IsPullRequest(), i.GetBody(), alreadyRead, milestoneID).Error
 				if err != nil {
-					return err
+					return errors.WithStack(err)
 				}
 			}
 
 			if err := importLabels(ctx, i, tx); err != nil {
-				return err
+				return errors.WithStack(err)
 			}
 			if err := importAssignees(ctx, i, tx); err != nil {
-				return err
+				return errors.WithStack(err)
 			}
 
 			err = tx.Exec(`
@@ -468,7 +469,7 @@ func ImportIssues(ctx context.Context, issues []github.Issue, channelID int, que
 				values (?, ?, ?)
 			`, id, channelID, q.ID).Error
 			if err != nil {
-				return err
+				return errors.WithStack(err)
 			}
 
 		}
