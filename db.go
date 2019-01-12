@@ -166,7 +166,7 @@ func dbMigrate() error {
 func doMigration(id int, query string) error {
 	return txGorm(func(tx *gorm.DB) error {
 		res := gormConn.First(&MigrationInfo{ID: id})
-		exist := res.RecordNotFound()
+		exist := !res.RecordNotFound()
 		if exist && res.Error != nil {
 			return res.Error
 		}
