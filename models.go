@@ -389,14 +389,21 @@ func ImportIssues(ctx context.Context, issues []github.Issue, channelID int, que
 			}
 
 			id := i.GetID()
-			prevUpdatedAt, prevAlreadyRead, err := issueUpdatedAtAndAlreadyRead(ctx, (int)(id), tx)
-			var exist bool
-			if err == sql.ErrNoRows {
-				exist = false
-			} else if err != nil {
-				return err
+			issueTmp := Issue{ID: (int)(id)}
+			res := tx.First(&issueTmp)
+			exist := res.RecordNotFound()
+			var prevUpdatedAt time.Time
+			var prevAlreadyRead bool
+			if !exist {
+				// do nothing
+			} else if res.Error != nil {
+				return res.Error
 			} else {
-				exist = true
+				prevAlreadyRead = issueTmp.AlreadyRead
+				prevUpdatedAt, err = parseTime(issueTmp.UpdatedAt)
+				if err != nil {
+					return err
+				}
 			}
 
 			createdAt := fmtTime(i.GetCreatedAt())
