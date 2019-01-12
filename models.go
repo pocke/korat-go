@@ -598,22 +598,12 @@ type AccountForGitHubAPI struct {
 	id          int
 }
 
-func SelectUndeterminedPullRequest(ctx context.Context, accountID int) (id int, owner string, repo string, number int, err error) {
+func SelectUndeterminedPullRequest(accountID int) *gorm.DB {
 	t := fmtTime(time.Now().Add(-3 * 24 * time.Hour))
-	err = gormConn.Raw(`
-		select i.id, i.repoOwner, i.repoName, i.number
-		from
-			issues as i,
-			channel_issues as ci,
-			channels as c
-		where
-			i.id = ci.issueID AND
-			ci.channelID = c.id AND
-			c.accountID = ? AND
-			i.isPullRequest = 1 AND
-			i.merged is null AND
-			i.closedAt is not null AND
-			i.updatedAt > ?
-	`, accountID, t).Row().Scan(&id, &owner, &repo, &number)
-	return
+	return gormConn.
+		Joins("JOIN channel_issues as ci ON ci.issueID = issues.id").
+		Joins("JOIN channels as c ON c.id = ci.channelID").
+		Where("c.accountID = ?", accountID).
+		Where("issues.isPullRequest = 1 AND issues.merged is null AND issues.closedAt is not null AND issues.updatedAt > ?", t).
+		Limit(1)
 }

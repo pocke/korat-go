@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"log"
 	"time"
 )
@@ -36,19 +35,20 @@ func startDetermineMerged(ctx context.Context, account Account) error {
 
 	for {
 		time.Sleep(3 * time.Second)
-		id, owner, name, number, err := SelectUndeterminedPullRequest(ctx, account.ID)
-		if err == sql.ErrNoRows {
+		i := Issue{}
+		db := SelectUndeterminedPullRequest(account.ID).First(&i)
+		if db.RecordNotFound() {
 			continue
-		} else if err != nil {
-			return err
+		} else if db.Error != nil {
+			return db.Error
 		}
-		pr, _, err := client.PullRequests.Get(ctx, owner, name, number)
+		pr, _, err := client.PullRequests.Get(ctx, i.RepoOwner, i.RepoName, i.Number)
 		if err != nil {
 			return err
 		}
 		merged := pr.GetMerged()
 
-		err = gormConn.Model(&Issue{ID: id}).Update("merged", merged).Error
+		err = gormConn.Model(&Issue{ID: i.ID}).Update("merged", merged).Error
 		if err != nil {
 			return err
 		}
