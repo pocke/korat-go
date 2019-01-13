@@ -36,7 +36,7 @@ func StartFetchIssues(ctx context.Context) error {
 		go func(c Channel) {
 			for {
 				childCtx, cancel := context.WithCancel(ctx)
-				err := startFetchIssuesWithChannel(childCtx, c)
+				err := errors.WithStack(startFetchIssuesWithChannel(childCtx, c))
 				log.Printf("%+v\n", err)
 				err = sendErrToSlack(err)
 				if err != nil {

@@ -4,6 +4,8 @@ import (
 	"context"
 	"log"
 	"time"
+
+	"github.com/pkg/errors"
 )
 
 func StartDetermineMerged(ctx context.Context) error {
@@ -17,7 +19,7 @@ func StartDetermineMerged(ctx context.Context) error {
 		go func(a Account) {
 			for {
 				childCtx, cancel := context.WithCancel(ctx)
-				err := startDetermineMerged(childCtx, a)
+				err := errors.WithStack(startDetermineMerged(childCtx, a))
 				log.Printf("%+v\n", err)
 				err = sendErrToSlack(err)
 				if err != nil {
