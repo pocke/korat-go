@@ -43,6 +43,7 @@ func StartFetchIssues(ctx context.Context) error {
 					log.Printf("%+v\n", err)
 				}
 				cancel()
+				time.Sleep(1 * time.Second)
 			}
 		}(c)
 	}
