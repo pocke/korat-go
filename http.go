@@ -20,6 +20,15 @@ func StartHTTPServer(port int) {
 		AllowOrigins: []string{"file:///", "http://localhost:32034"},
 		AllowHeaders: []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAccept},
 	}))
+	e.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			err := next(c)
+			if err != nil {
+				go sendErrToSlack(errors.WithStack(err))
+			}
+			return err
+		}
+	})
 
 	e.GET("/accounts", accountsIndex)
 	e.POST("/accounts", accountsCreate)
