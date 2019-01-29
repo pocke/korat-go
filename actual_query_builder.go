@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/google/go-github/v21/github"
@@ -40,6 +41,7 @@ func (c *Condition) satisfy(i github.Issue) bool {
 }
 
 func BuildActualQuery(ctx context.Context, cs []Channel) ([]ActualQuery, error) {
+	log.Println("Start to build actual queries")
 	res := make([]ActualQuery, 0)
 	for _, c := range cs {
 		token := c.Account.AccessToken
@@ -68,6 +70,7 @@ func BuildActualQuery(ctx context.Context, cs []Channel) ([]ActualQuery, error) 
 			res = append(res, aq)
 		}
 	}
+	log.Printf("Build %d queries", len(res))
 	return res, nil
 }
 
