@@ -346,6 +346,12 @@ func includeAssigneesToIssues(ctx context.Context, issues []*IssueOld) error {
 
 var RepoFromIssueUrlRe = regexp.MustCompile(`/([^/]+)/([^/]+)/issues/\d+$`)
 
+func repoInfoFromIssue(i github.Issue) (string, string) {
+	url := i.GetURL()
+	m := RepoFromIssueUrlRe.FindStringSubmatch(url)
+	return m[1], m[2]
+}
+
 func ImportIssues(ctx context.Context, issues []github.Issue, channelID int, query string) error {
 	return txGorm(func(tx *gorm.DB) error {
 		q := Query{Query: query}
@@ -355,10 +361,7 @@ func ImportIssues(ctx context.Context, issues []github.Issue, channelID int, que
 		}
 
 		for _, i := range issues {
-			url := i.GetURL()
-			m := RepoFromIssueUrlRe.FindStringSubmatch(url)
-			repoOwner := m[1]
-			repoName := m[2]
+			repoOwner, repoName := repoInfoFromIssue(i)
 
 			user := i.GetUser()
 			userID := user.GetID()

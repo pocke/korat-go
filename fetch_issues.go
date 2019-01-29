@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/google/go-github/v21/github"
@@ -19,12 +18,6 @@ import (
 	"golang.org/x/oauth2"
 )
 
-// GitHub does not accept too large URI,
-// so korat should separate requests if query is too long.
-// The limit is actually about 6800. This limit is investigated with binary searching with GitHub API.
-// This constant has leeway.
-const GitHubURIlimit = 5000
-
 func StartFetchIssues(ctx context.Context) error {
 	chs := make([]Channel, 0)
 	err := gormConn.Preload("Account").Find(&chs).Error
@@ -32,11 +25,16 @@ func StartFetchIssues(ctx context.Context) error {
 		return err
 	}
 
-	for _, c := range chs {
-		go func(c Channel) {
+	qs, err := BuildActualQuery(ctx, chs)
+	if err != nil {
+		return err
+	}
+
+	for _, q := range qs {
+		go func(q ActualQuery) {
 			for {
 				childCtx, cancel := context.WithCancel(ctx)
-				err := errors.WithStack(startFetchIssuesWithChannel(childCtx, c))
+				err := errors.WithStack(startFetchIssuesWithChannel(childCtx, q))
 				log.Printf("%+v\n", err)
 				err = sendErrToSlack(err)
 				if err != nil {
@@ -45,7 +43,7 @@ func StartFetchIssues(ctx context.Context) error {
 				cancel()
 				time.Sleep(1 * time.Second)
 			}
-		}(c)
+		}(q)
 	}
 
 	return nil
@@ -68,28 +66,11 @@ func sendErrToSlack(err error) error {
 	return err
 }
 
-func startFetchIssuesWithChannel(ctx context.Context, c Channel) error {
-	client := ghClient(ctx, c.Account.AccessToken)
-	var qs []string
-	var err error
-	if c.System.Valid == true {
-		qs, err = buildSystemQueries(ctx, c.System.String, client)
-		if err != nil {
-			return err
-		}
-	} else {
-		qs, err = c.Queries()
-		if err != nil {
-			return err
-		}
-	}
-
+func startFetchIssuesWithChannel(ctx context.Context, q ActualQuery) error {
 	errCh := make(chan error)
-	for _, q := range qs {
-		err := startFetchIssuesFor(ctx, client, c.ID, q, errCh)
-		if err != nil {
-			return err
-		}
+	err := startFetchIssuesFor(ctx, q, errCh)
+	if err != nil {
+		return err
 	}
 	for err := range errCh {
 		if err != nil {
@@ -100,12 +81,13 @@ func startFetchIssuesWithChannel(ctx context.Context, c Channel) error {
 	return errors.New("Unreachable")
 }
 
-func startFetchIssuesFor(ctx context.Context, client *github.Client, channelID int, queryBase string, errCh chan<- error) error {
+func startFetchIssuesFor(ctx context.Context, q ActualQuery, errCh chan<- error) error {
+	client := ghClient(ctx, q.accessToken)
 	go func() {
-		errCh <- fetchOldIssues(ctx, client, channelID, queryBase)
+		errCh <- fetchOldIssues(ctx, client, q)
 	}()
 	go func() {
-		errCh <- fetchNewIssues(ctx, client, channelID, queryBase)
+		errCh <- fetchNewIssues(ctx, client, q)
 	}()
 
 	return nil
@@ -124,7 +106,7 @@ func (q *fetchIssueQuery) build() string {
 	}
 }
 
-func fetchAndSaveIssue(ctx context.Context, client *github.Client, channelID int, query *fetchIssueQuery, order string) (int, error) {
+func fetchAndSaveIssue(ctx context.Context, client *github.Client, q ActualQuery, query *fetchIssueQuery, order string) (int, error) {
 	opt := &github.SearchOptions{
 		Sort:  "updated",
 		Order: order,
@@ -138,9 +120,20 @@ func fetchAndSaveIssue(ctx context.Context, client *github.Client, channelID int
 		return -1, err
 	}
 
-	err = ImportIssues(ctx, issues.Issues, channelID, query.base)
-	if err != nil {
-		return -1, err
+	cidMap := make(map[int][]github.Issue)
+	for _, i := range issues.Issues {
+		for _, cond := range q.conditions {
+			if cond.satisfy(i) {
+				cidMap[cond.channel.ID] = append(cidMap[cond.channel.ID], i)
+			}
+		}
+	}
+
+	for cid, is := range cidMap {
+		err := ImportIssues(ctx, is, cid, query.base)
+		if err != nil {
+			return -1, err
+		}
 	}
 
 	if err := notifyUnreadCount(ctx, issues.Issues); err != nil {
@@ -150,10 +143,10 @@ func fetchAndSaveIssue(ctx context.Context, client *github.Client, channelID int
 	return len(issues.Issues), nil
 }
 
-func fetchOldIssues(ctx context.Context, client *github.Client, channelID int, queryBase string) error {
+func fetchOldIssues(ctx context.Context, client *github.Client, q ActualQuery) error {
 	var qid int
 	err := txGorm(func(tx *gorm.DB) error {
-		q := Query{Query: queryBase}
+		q := Query{Query: q.query}
 		err := tx.FirstOrCreate(&q, q).Error
 		qid = q.ID
 		return err
@@ -182,8 +175,8 @@ func fetchOldIssues(ctx context.Context, client *github.Client, channelID int, q
 			break
 		}
 
-		q := &fetchIssueQuery{base: queryBase, cond: "updated:<=" + fmtTime(oldestUpdatedAt)}
-		cnt, err := fetchAndSaveIssue(ctx, client, channelID, q, "desc")
+		fq := &fetchIssueQuery{base: q.query, cond: "updated:<=" + fmtTime(oldestUpdatedAt)}
+		cnt, err := fetchAndSaveIssue(ctx, client, q, fq, "desc")
 		if err != nil {
 			return err
 		}
@@ -195,10 +188,10 @@ func fetchOldIssues(ctx context.Context, client *github.Client, channelID int, q
 	return nil
 }
 
-func fetchNewIssues(ctx context.Context, client *github.Client, channelID int, queryBase string) error {
+func fetchNewIssues(ctx context.Context, client *github.Client, q ActualQuery) error {
 	var qid int
 	err := txGorm(func(tx *gorm.DB) error {
-		q := Query{Query: queryBase}
+		q := Query{Query: q.query}
 		err := tx.FirstOrCreate(&q, q).Error
 		qid = q.ID
 		return err
@@ -222,8 +215,8 @@ func fetchNewIssues(ctx context.Context, client *github.Client, channelID int, q
 			}
 		}
 
-		q := &fetchIssueQuery{base: queryBase, cond: "updated:>=" + fmtTime(newestUpdatedAt)}
-		_, err = fetchAndSaveIssue(ctx, client, channelID, q, "asc")
+		fq := &fetchIssueQuery{base: q.query, cond: "updated:>=" + fmtTime(newestUpdatedAt)}
+		_, err = fetchAndSaveIssue(ctx, client, q, fq, "asc")
 		if err != nil {
 			return err
 		}
@@ -265,58 +258,4 @@ func deqSearchIssueQueue() {
 		time.Sleep(5 * time.Second)
 		<-searchIssueQueue
 	}()
-}
-
-func buildSystemQueries(ctx context.Context, kind string, client *github.Client) ([]string, error) {
-	switch kind {
-	case "teams":
-		var allTeams []*github.Team
-		opt := &github.ListOptions{PerPage: 100}
-		for {
-			teams, resp, err := client.Teams.ListUserTeams(ctx, opt)
-			if err != nil {
-				return nil, err
-			}
-			allTeams = append(allTeams, teams...)
-			if resp.NextPage == 0 {
-				break
-			}
-			opt.Page = resp.NextPage
-		}
-		var q []string
-		for _, t := range allTeams {
-			q = append(q, fmt.Sprintf("team:%s/%s", t.Organization.GetLogin(), t.GetSlug()))
-		}
-
-		return []string{strings.Join(q, " ")}, nil
-	case "watching":
-		var allRepos []*github.Repository
-		opt := &github.ListOptions{PerPage: 100}
-		for {
-			repos, resp, err := client.Activity.ListWatched(ctx, "", opt)
-			if err != nil {
-				return nil, err
-			}
-			allRepos = append(allRepos, repos...)
-			if resp.NextPage == 0 {
-				break
-			}
-			opt.Page = resp.NextPage
-		}
-		res := []string{""}
-		for _, r := range allRepos {
-			q := fmt.Sprintf("repo:%s", r.GetFullName())
-			lastIdx := len(res) - 1
-			last := res[lastIdx]
-			newQuery := last + " " + q
-			if len(newQuery) < GitHubURIlimit {
-				res[lastIdx] = newQuery
-			} else {
-				res = append(res, q)
-			}
-		}
-		return res, nil
-	default:
-		return nil, errors.Errorf("%s is not a valid system type.", kind)
-	}
 }
