@@ -74,54 +74,36 @@ func UnreadCountForIssue(ctx context.Context, issueIDs []int) ([]*UnreadCount, e
 		issueIDsStr[idx] = strconv.Itoa(issueID)
 	}
 
-	rows, err := gormConn.Raw(fmt.Sprintf(`
-		select distinct
-			channelID
-		from
-			channel_issues
-		where
-			issueID IN (%s)
-	`, strings.Join(issueIDsStr, ","))).Rows()
+	var channelIDs []int
+	err := gormConn.Table("channel_issues").
+		Where("issueID IN (?)", issueIDsStr).
+		Pluck("distinct(channelID)", &channelIDs).Error
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
-	defer rows.Close()
 
-	channelIDs := make([]string, 0)
 	res := make([]*UnreadCount, 0)
 	channelMap := make(map[int]*UnreadCount, 0)
 
-	for i := 0; rows.Next(); i++ {
-		c := &UnreadCount{Count: 0}
-		err := rows.Scan(&c.ChannelID)
-		if err != nil {
-			return nil, err
-		}
+	for _, cid := range channelIDs {
+		c := &UnreadCount{Count: 0, ChannelID: cid}
 		res = append(res, c)
-		channelIDs = append(channelIDs, strconv.Itoa(c.ChannelID))
 		channelMap[c.ChannelID] = c
 	}
 
-	rows, err = gormConn.Raw(fmt.Sprintf(`
-		select
-			X.channelID, count(X.issueID)
-		from
-			(
-				select distinct
-					channelID, issueID
-				from
-					channel_issues as ci,
-					issues as i
-				where
-					ci.issueID = i.id AND
-					ci.channelID IN (%s) AND
-					i.alreadyRead = 0
-			) as X
-		group by
-			X.channelID
-	`, strings.Join(channelIDs, ","))).Rows()
+	subq := gormConn.
+		Table("channel_issues").
+		Joins("JOIN issues on issues.id = channel_issues.issueID").
+		Select("distinct channelID, issueID").
+		Where("channelID IN (?)", channelIDs).
+		Where("alreadyRead = 0").QueryExpr()
+	rows, err := gormConn.Raw(`
+		select channelID, count(issueID)
+		from (?)
+		group by channelID
+		`, subq).Rows()
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 	defer rows.Close()
 
@@ -130,7 +112,7 @@ func UnreadCountForIssue(ctx context.Context, issueIDs []int) ([]*UnreadCount, e
 		var cnt int
 		err := rows.Scan(&channelID, &cnt)
 		if err != nil {
-			return nil, err
+			return nil, errors.WithStack(err)
 		}
 
 		channelMap[channelID].Count = cnt
