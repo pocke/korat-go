@@ -45,20 +45,9 @@ func BuildActualQuery(ctx context.Context, cs []Channel) ([]ActualQuery, error) 
 	res := make([]ActualQuery, 0)
 	for _, c := range cs {
 		token := c.Account.AccessToken
-		client := ghClient(ctx, token)
-
-		var qs []string
-		var err error
-		if c.System.Valid == true {
-			qs, err = buildSystemQueries(ctx, c.System.String, client)
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			qs, err = c.Queries()
-			if err != nil {
-				return nil, err
-			}
+		qs, err := c.Queries(ctx)
+		if err != nil {
+			return nil, err
 		}
 
 		for _, q := range qs {

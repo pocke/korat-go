@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 
@@ -78,10 +79,15 @@ func (m MigrationInfo) TableName() string {
 	return "migration_info"
 }
 
-func (c Channel) Queries() ([]string, error) {
-	res := make([]string, 0)
-	err := json.Unmarshal([]byte(c.QueriesRaw), &res)
-	return res, err
+func (c Channel) Queries(ctx context.Context) ([]string, error) {
+	if c.System.Valid == true {
+		client := ghClient(ctx, c.Account.AccessToken)
+		return buildSystemQueries(ctx, c.System.String, client)
+	} else {
+		res := make([]string, 0)
+		err := json.Unmarshal([]byte(c.QueriesRaw), &res)
+		return res, err
+	}
 }
 
 func EdgeIssueTime(queryID int, order string) *gorm.DB {
