@@ -111,14 +111,14 @@ func txGorm(f func(*gorm.DB) error) error {
 	return tx.Commit().Error
 }
 
-func init() {
+func InitGormDB() error {
 	fname, err := homedir.Expand("~/.cache/korat/development.sqlite3")
 	if err != nil {
-		panic(err)
+		return errors.WithStack(err)
 	}
 	db, err := gorm.Open("sqlite3", fname)
 	if err != nil {
-		panic(err)
+		return errors.WithStack(err)
 	}
 
 	// Will not set CreatedAt and UpdatedAt on .Create() call
@@ -128,10 +128,11 @@ func init() {
 	// db.LogMode(true)
 	err = db.Exec("PRAGMA foreign_keys = ON;").Error
 	if err != nil {
-		panic(err)
+		return errors.WithStack(err)
 	}
 
 	gormConn = db
+	return nil
 }
 
 var gormConn *gorm.DB

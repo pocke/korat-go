@@ -4,13 +4,27 @@ import (
 	"context"
 	"fmt"
 	"os"
+
+	"github.com/pkg/errors"
 )
 
 func main() {
-	err := dbMigrate()
+	err := Main()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%+v\n", err)
 		os.Exit(1)
+	}
+}
+
+func Main() error {
+	err := InitGormDB()
+	if err != nil {
+		return err
+	}
+
+	err = dbMigrate()
+	if err != nil {
+		return err
 	}
 
 	ctx := context.Background()
@@ -28,4 +42,5 @@ func main() {
 	}()
 	go StartHTTPServer(5427)
 	select {}
+	return errors.New("unreachable")
 }

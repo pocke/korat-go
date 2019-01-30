@@ -51,12 +51,16 @@ func BuildActualQuery(ctx context.Context, cs []Channel) ([]ActualQuery, error) 
 		}
 
 		for _, q := range qs {
-			aq := ActualQuery{
-				query:       q,
-				conditions:  []Condition{{channel: c}},
-				accessToken: token,
+			if isOptimizableQuery(q) {
+
+			} else {
+				aq := ActualQuery{
+					query:       q,
+					conditions:  []Condition{{channel: c}},
+					accessToken: token,
+				}
+				res = append(res, aq)
 			}
-			res = append(res, aq)
 		}
 	}
 	log.Printf("Build %d queries", len(res))
