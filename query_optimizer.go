@@ -41,6 +41,7 @@ func (o *QueryOptimizer) assign(c Channel, q string) {
 	}
 }
 
+// TODO support multi account
 func (o *QueryOptimizer) Optimize() ([]ActualQuery, error) {
 	db, err := NewTmpDatabaseForOptimize()
 	if err != nil {
@@ -84,7 +85,22 @@ func (o *QueryOptimizer) Optimize() ([]ActualQuery, error) {
 		}
 	}
 
-	db.Raw(`
+	owners, err := frequentOwners(db)
+	if err != nil {
+		return nil, err
+	}
+
+	qdbs := make([]QDB, 0)
+	err = db.Where("owner NOT IN (?)", owners).Find(&qdbs).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return o.actualQueries, nil
+}
+
+func frequentOwners(db *gorm.DB) ([]string, error) {
+	rows, err := db.Raw(`
 		select owner
 		from q
 		where
@@ -99,9 +115,21 @@ func (o *QueryOptimizer) Optimize() ([]ActualQuery, error) {
 		order by
 			count(id) desc
 		limit 5;
-	`)
-
-	return o.actualQueries, nil
+	`).Rows()
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	res := make([]string, 0, 5)
+	for rows.Next() {
+		var str string
+		err := rows.Scan(str)
+		if err != nil {
+			return nil, err
+		}
+		res = append(res, str)
+	}
+	return res, nil
 }
 
 func NewTmpDatabaseForOptimize() (*gorm.DB, error) {
